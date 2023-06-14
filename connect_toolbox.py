@@ -171,6 +171,7 @@ def get_isi(spiketimes:np.array):
     return np.array(isi)
 
 def get_causal_window_idx(ccg:np.array, binsize=.5, window=[1, 5]):
+    ccg = np.array(ccg)
     idx_t0 = ccg.shape[0] // 2
     idx_delay_window = np.arange(idx_t0 + window[0]/binsize, idx_t0 + window[1]/binsize).astype(int)
     return idx_delay_window
@@ -462,17 +463,27 @@ def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
     for file in files:
         pairs = pd.read_json(file)
         include = []
+        idx = get_causal_window_idx(pairs.loc[0][f'ccg_neuron_{stim}'])
         for i in range(len(pairs)):
             pair = pairs.loc[i]
-            include_tmp = False
+            include_tmp = True
+            # check if there are enough spikes in causal window for a good extimate of efficacy
             for unit_type in ('neuron', 'ne'):
                 ccg = np.array(pair[f'ccg_{unit_type}_{stim}'])
-                connect, _ = check_connection(ccg, stim, binsize=.5, alpha=.99)
-                include_tmp = include_tmp or connect 
-            include.append(include_tmp)
+                if sum(ccg[idx]) < 20:
+                    include_tmp = False
+                    include.append(include_tmp)
+                    break
+            # check if any of the ccg indicate functional connection
+            if include_tmp:
+                for unit_type in ('neuron', 'ne'):
+                    ccg = np.array(pair[f'ccg_{unit_type}_{stim}'])
+                    include_tmp, _ = check_connection(ccg, stim)
+                    if include_tmp:
+                        break
+                include.append(include_tmp)
         pairs[f'inclusion_{stim}'] = include
         pairs.to_json(file)
-
 
 def get_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
                            savefolder=r'E:\Congcong\Documents\data\connection\data-summary'):
