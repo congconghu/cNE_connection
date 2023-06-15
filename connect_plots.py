@@ -99,7 +99,7 @@ def plot_ccg_ccg_filtered(axes, ccg, baseline, thresh, taxis=None):
     axes[1].plot([-50, 50], 6*ccg_filtered.std() * np.ones(2))
 
 
-def plot_ccg(ax, ccg, baseline, thresh=None, taxis=None, nspk=None, causal_method='peak'):
+def plot_ccg(ax, ccg, baseline, thresh=None, taxis=None, nspk=None, causal_method='peak', causal=True, xlim=[-50, 50]):
     if taxis is None:
         edges = np.arange(-50, 50.5, .5)
         taxis = (edges[1:] + edges[:-1]) / 2
@@ -109,22 +109,25 @@ def plot_ccg(ax, ccg, baseline, thresh=None, taxis=None, nspk=None, causal_metho
     ax.bar(taxis, ccg, width=.5, color='k')
     
     # plot causal spikes
-    if causal_method == 'peak':
-        causal_idx = ct.get_causal_spike_idx(ccg, method=causal_method)
-        causal_baseline = ct.get_causal_spk_baseline(ccg, causal_idx)
+    if causal:
+        if causal_method == 'peak':
+            causal_idx = ct.get_causal_spike_idx(ccg, method=causal_method)
+            causal_baseline = ct.get_causal_spk_baseline(ccg, causal_idx)
     
-    try:
-        ax.bar(taxis[causal_idx], ccg[causal_idx]-causal_baseline, bottom=causal_baseline,
+        try:
+            ax.bar(taxis[causal_idx], ccg[causal_idx]-causal_baseline, bottom=causal_baseline,
                   width=.5, color='r')
-    except (NameError, TypeError):
-        pass
+        except (NameError, TypeError):
+            pass
+        
     # plot baseline and threshold
     try:
         ax.plot(taxis, baseline, 'b')
         ax.plot(taxis, thresh, 'b--')
     except ValueError:
         pass
-    ax.set_xlim([-50, 50])
+    
+    ax.set_xlim(xlim)
     ax.set_xlabel('Time after MGB spike (ms)')
     if nspk:
         ax.set_ylabel('A1 firing rate (spk/s)')
@@ -232,44 +235,120 @@ def batch_plot_ne_neuron_connection_ccg(datafolder=r'E:\Congcong\Documents\data\
     files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
     for file in files:
         nepairs = pd.read_json(file)
+        exp = re.search('\d{6}_\d{6}', file).group(0)
         cne_target = nepairs[['cne', 'target_idx']].drop_duplicates()
+        _, input_units, target_units, _ = load_input_target_files(datafolder, exp)
+
         for cne, target_idx in cne_target.values:
             ne_neuron_pairs = nepairs[(nepairs.cne == cne) & (nepairs.target_idx == target_idx)]
             n_pairs = len(ne_neuron_pairs)
             assert(n_pairs > 1)
-            fig, axes = plt.subplots(n_pairs, 3, figsize=[figure_size[2][0], 2*n_pairs*cm])
+            bottom_space = .8
+            fig = plt.figure(figsize=[8.8*cm, 1.8*n_pairs*cm + bottom_space*cm])
+            
+            # probe
+            x_start = .1
+            y_start = (1.8*(n_pairs-2) + bottom_space)/ (1.8 * n_pairs + bottom_space)
+            x_fig = .05
+            y_fig = 3 / (1.8 * n_pairs + bottom_space)
+            ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+            plot_position_on_probe(ax, ne_neuron_pairs, input_units)
+            
+            # add axes for ccg plot
+            x_start = .3
+            y_start = bottom_space / (1.8 * n_pairs + bottom_space)
+            x_fig = .2
+            x_space = .05
+            y_fig = 0.8 * (1.8 / (1.8 * n_pairs + bottom_space))
+            y_space =  0.2 * (1.8 / (1.8 * n_pairs + bottom_space))
+            axes = add_multiple_axes(fig, n_pairs, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
             plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs)
-            exp = re.search('\d{6}_\d{6}', file).group(0)
+            
+            # add axes for waveform plot
+            x_start = .75
+            y_start = (bottom_space + .4) / (1.8 * n_pairs + bottom_space)
+            x_fig = .1
+            x_space = 0
+            y_fig = 0.4 * (1.8 / (1.8 * n_pairs + bottom_space))
+            y_space =  0.6 * (1.8 / (1.8 * n_pairs + bottom_space))
+            axes = add_multiple_axes(fig, n_pairs, 1, x_start, y_start, x_fig, y_fig, x_space, y_space)
+            plot_all_waveforms(axes, ne_neuron_pairs, input_units)
+            # plot A1 target waveform
+            x_start = .87
+            ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+            plot_all_waveforms(np.array([ax]), ne_neuron_pairs, target_units, 'target')
+            
+            # save file
             target_unit = ne_neuron_pairs.iloc[0]['target_unit']
-            plt.tight_layout()
-            axes[len(ne_neuron_pairs) - 1][0].get_xaxis().set_label_coords(1.5,-.5)
             fig.savefig(os.path.join(figfolder, f'ne_ccg_{stim}', f'{exp}-cne_{cne}-target_{target_unit}.jpg'), dpi=300)
             plt.close()
 
 
 def plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs, stim='spon'):
-    for i in range(len(ne_neuron_pairs)):
+    n_pairs = len(ne_neuron_pairs)
+    for i in range(n_pairs):
         ax = axes[i]
         pair = ne_neuron_pairs.iloc[i]
         peak_fr = []
-        for j, unit_type in enumerate(('neuron', 'ne', 'nonne')):
+        for j, unit_type in enumerate(('nonne', 'ne')):
             ccg = np.array(eval(f'pair.ccg_{unit_type}_{stim}'))
             nspk = np.array(eval(f'pair.nspk_{unit_type}_{stim}'))
-            peak_fr.append(plot_ccg(ax[j], ccg, None, nspk=nspk))
-            if i == 0 and j == 0:
+            peak_fr.append(
+                plot_ccg(ax[j], ccg, None, nspk=nspk, causal=pair[f'inclusion_{stim}'], xlim=[-25, 25])
+                )
+            # x label and y label
+            if i == n_pairs-1 and j == 0:
                 ax[j].get_xaxis().set_label_coords(1.2, -.3)
             else:
                 ax[j].set_xlabel('')
                 ax[j].set_ylabel('')
+            # ytick label
+            if j == 1:
+                ax[j].set_yticklabels([])
+            if i < n_pairs - 1:
+                ax[j].set_xticklabels([])
+
         m = max(peak_fr)
-        for j, unit_type in enumerate(('neuron', 'ne', 'nonne')):
+        for j, unit_type in enumerate(('nonne', 'ne')):
             ax[j].set_ylim([0, m * 1.1])
-            ax[j].text(20, m*0.8, 
+            if pair[f'inclusion_{stim}']:
+                ax[j].text(-15, m*0.8, 
                        '{:.2f}'.format(eval(f'pair.efficacy_{unit_type}_{stim}')),
                        fontsize=6)
-            if not pair[f'inclusion_{stim}']:
-                rect = mpl.patches.Rectangle([-50, 0], 100, 300, facecolor='w', edgecolor='w', alpha=.8)
-                ax[j].add_patch(rect)
+
+
+def plot_all_waveforms(axes, pairs, units, unit_type='input'):
+    n_pairs = len(pairs) if unit_type == 'input' else 1
+    if axes.ndim > 1:
+        axes = axes.flatten()
+    for i in range(n_pairs):
+        unit_idx = pairs.iloc[i][f'{unit_type}_idx']
+        unit = units[unit_idx]
+        ax = axes[i]
+        idx = np.where(unit.adjacent_chan == unit.chan)[0][0]
+        waveform_mean = unit.waveforms_mean[idx, :]
+        waveform_std = unit.waveforms_std[idx, :]
+        if unit_type == 'input':
+            plot_waveform(ax, waveform_mean, waveform_std)
+            ax.set_title('neuron #{}'.format(unit_idx+1), fontsize=6)
+        else:
+            tpd = unit.waveform_tpd
+            plot_waveform(ax, waveform_mean, waveform_std, tpd=tpd)
+            ax.set_title('unit{}'.format(pairs.iloc[i][f'{unit_type}_unit']), fontsize=6)
+
+
+def plot_position_on_probe(ax, pairs, units):
+    for unit in units:
+        ax.scatter(unit.position[0], unit.position[1], s=2, color='gray')
+    for i in range(len(pairs)):
+        pair = pairs.iloc[i]
+        unit = units[pair.input_idx]
+        ax.scatter(unit.position[0], unit.position[1], s=4, color='k')
+        ax.text(unit.position[0], unit.position[1], f'{pair.input_idx+1}', fontsize=5)
+    ax.get_xaxis().set_visible(False)
+    ax.spines[['bottom']].set_visible(False)
+
+
 
 
 def batch_plot_ne_neuron_connection_ccg_ss(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
@@ -323,6 +402,7 @@ def batch_plot_ne_neuron_connection_ccg_ss(datafolder=r'E:\Congcong\Documents\da
             target_unit = ne_neuron_pairs.iloc[0]['target_unit']
             fig.savefig(os.path.join(figfolder, f'{exp}-cne_{cne}-target_{target_unit}-all_ss.jpg'), dpi=300)
             plt.close()
+
 
 
 def batch_plot_ne_neuron_connection_strf_ccg_ss(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
@@ -451,7 +531,7 @@ def add_multiple_axes(fig, nrows, ncols, x_start, y_start, x_fig, y_fig, x_space
                                     x_fig, y_fig]))
         axes.append(ax)
     axes = axes[::-1]
-    return axes
+    return np.array(axes)
 
 
 def batch_plot_icweight(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
@@ -513,7 +593,7 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
     pairs = pairs[pairs[f'inclusion_{stim}']]
     pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
     pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
-    ax.scatter(pairs.efficacy_nonne_spon, pairs.efficacy_ne_spon, s=20, color='k')
+    ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=20, color='k')
     ax.plot([0, 40], [0, 40], 'k')
     ax.set_xlim([0, 25])
     ax.set_ylim([0, 25])
@@ -522,7 +602,6 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
     print(p)
     
     
-        
 # ------------------------------------ figure plots ----------------------------------------------
 def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl', 
             figfolder = r'E:\Congcong\Documents\data\connection\paper\figure',
@@ -852,4 +931,5 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
         fig.savefig(os.path.join(savefolder, 'pair_p_share_target_ne_member.jpg'), dpi=300)
         plt.close()
 
-    
+def figure3():
+    pass
