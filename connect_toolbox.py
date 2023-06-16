@@ -732,3 +732,12 @@ def batch_get_fr(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         json.dump(fr_all, outfile)
     
     
+def batch_get_position_idx(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'):
+    spkfiles = glob.glob(os.path.join(datafolder, '*fs20000.pkl'))
+    nfiles = len(spkfiles)
+    for i, file in enumerate(spkfiles):
+        with open(file, 'rb') as f:
+            session = pickle.load(f)
+        session.get_position_idx()
+        session.save_pkl_file(file)
+    
