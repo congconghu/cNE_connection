@@ -960,5 +960,91 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
         fig.savefig(os.path.join(savefolder, 'pair_p_share_target_ne_member.jpg'), dpi=300)
         plt.close()
 
-def figure3():
-    pass
+def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
+
+    
+    # panel A 
+    example_file = os.path.join(
+        datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
+    nepairs = pd.read_json(example_file)
+    exp = re.search('\d{6}_\d{6}', example_file).group(0)
+    _, input_units, target_units, _ = load_input_target_files(datafolder, exp)
+    nefile = re.sub('-pairs-ne-spon.json', '-ne-20dft-spon.pkl', example_file)
+    with open(nefile, 'rb') as f:
+        ne = pkl.load(f)
+    patterns = ne.patterns
+    cne = 2
+    # cNE2-A1_33
+    target_idx = 3
+    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
+    axes = fig.get_axes()
+    axes[0].set_ylim([4600, 5800])
+    axes[0].invert_yaxis()
+    axes_ccg = axes[2:8]
+    for ax in axes_ccg:
+        ax.set_ylim([0, 200])
+        ax.set_yticks(range(0, 201, 50))
+        ax.set_yticklabels([0, '', 100, '', 200])
+    fig.savefig(os.path.join(figfolder, 'fig3-A1.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-A1.pdf'), dpi=300)
+    # cNE2-A1_43
+    target_idx = 38
+    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
+    axes = fig.get_axes()
+    axes[0].set_ylim([4600, 5800])
+    axes[0].invert_yaxis()
+    axes_ccg = axes[2:8]
+    for ax in axes_ccg:
+        ax.set_ylim([0, 150])
+        ax.set_yticks(range(0, 151, 50))
+        ax.set_yticklabels(range(0, 151, 50))
+    fig.savefig(os.path.join(figfolder, 'fig3-A2.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-A2.pdf'), dpi=300)
+    plt.close()
+    
+    # panel B
+    example_file = os.path.join(
+        datafolder, '220825_005353-site6-5500um-25db-dmr-61min-H31x64-fs20000-pairs-ne-spon.json')
+    nepairs = pd.read_json(example_file)
+    exp = re.search('\d{6}_\d{6}', example_file).group(0)
+    _, input_units, target_units, _ = load_input_target_files(datafolder, exp)
+    nefile = re.sub('-pairs-ne-spon.json', '-ne-20dft-spon.pkl', example_file)
+    with open(nefile, 'rb') as f:
+        ne = pkl.load(f)
+    patterns = ne.patterns
+    target_idx = 10
+    plt.close()
+    # cNE4-A1_149
+    cne = 4
+    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
+    axes = fig.get_axes()
+    axes[0].set_ylim([4400, 5400])
+    axes[1].set_xlim([-.3, .7])
+    axes[0].invert_yaxis()
+    axes_ccg = axes[2:14]
+    for ax in axes_ccg:
+        ax.set_ylim([0, 50])
+        ax.set_yticks(range(0, 51, 25))
+        ax.set_yticklabels(range(0, 51, 25))
+    fig.savefig(os.path.join(figfolder, 'fig3-B1.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-B1.pdf'), dpi=300)
+    plt.close()
+    # cNE3-A1_149
+    cne = 3
+    nepairs['inclusion_spon'] = True
+    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
+    axes = fig.get_axes()
+    axes[0].set_ylim([4400, 5400])
+    axes[1].set_xlim([-.3, .7])
+    axes[0].invert_yaxis()
+    axes_ccg = axes[2:12]
+    for ax in axes_ccg:
+        ax.set_ylim([0, 15])
+        ax.set_yticks(range(0, 16, 5))
+        ax.set_yticklabels(range(0, 16, 5))
+    fig.savefig(os.path.join(figfolder, 'fig3-B2.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-B2.pdf'), dpi=300)
+    plt.close()
+    
+   
