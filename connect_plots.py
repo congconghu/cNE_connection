@@ -51,7 +51,7 @@ cm = 1/2.54  # centimeters in inches
 figure_size = [(17.6*cm, 17*cm), (11.6*cm, 17*cm), (8.5*cm, 17*cm)]
 activity_alpha = 99.5
 colors = sns.color_palette("Paired")
-tpd_color = (colors[1], colors[5], colors[0], colors[4])
+tpd_color = (colors[5], colors[1], colors[0], colors[4])
 A1_color = (colors[1], colors[0])
 MGB_color = (colors[5], colors[4])
 colors_split = [colors[i] for i in [7, 6, 3, 2, 9, 8]]
@@ -588,47 +588,6 @@ def batch_plot_strf(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
         with open(file, 'rb') as f:
             session = pickle.load(f)
         session.plot_strf(figfolder=figfolder)
-
-# ---------------------------summary plots -----------------------------------------
-def plot_waveform_ptd(datafolder='E:\Congcong\Documents\data\connection\data-pkl', region='A1', 
-                      ax=None, savefolder=None):
-    files = glob.glob(os.path.join(datafolder, '*fs20000.pkl'))
-    tpd = []
-    for file in files:
-        depth = int(re.search('\d+(?=um)', file).group(0))
-        if region == 'MGB' and depth < 3000:
-            continue
-        elif region == 'A1' and depth > 2000:
-            continue
-        
-        with open(file, 'rb') as f:
-            session = pickle.load(f)
-        
-        for unit in session.units:
-            tpd.append(unit.waveform_tpd)
-    if ax is  None:
-        fig = plt.figure(figsize=[2, 2])
-        ax = fig.add_axes([.1, .1, .8, .8])
-    ax.hist(tpd, np.arange(0, .5, .05), color=tpd_color[0])
-    ax.hist(tpd, np.arange(.45, 1.5, .05), color=tpd_color[1])
-    ax.set_xlabel('Trough-Peak delay (ms)')
-    ax.set_ylabel('# of neurons')
-    if savefolder:
-        fig.savefig(os.path.join(savefolder, f'tpd-{region}.jpg'), bbox_inches='tight', dpi=300)
-
-
-def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
-    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}.json'))
-    pairs = pairs[pairs[f'inclusion_{stim}']]
-    pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
-    pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
-    ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=20, color='k')
-    ax.plot([0, 40], [0, 40], 'k')
-    ax.set_xlim([0, 25])
-    ax.set_ylim([0, 25])
-    
-    _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
-    print(p)
     
     
 # ------------------------------------ figure plots ----------------------------------------------
@@ -963,7 +922,28 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
 def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
 
-    
+    # panel C and D
+    fig = plt.figure(figsize=[figure_size[0][0], 5*cm])
+    x_start = .1
+    y_start = .2
+    x_fig = .2
+    y_fig = .6
+    # panel C: NE vs nonNE spike efficacy
+    print('C')
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_efficacy_ne_vs_nonne(ax)
+    # panel D-i: BS/NS neurons
+    print('D')
+    x_start = .4
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_waveform_ptd(ax=ax)
+    # panel D-ii: BS/NS neurons
+    x_start = .7
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_efficacy_gain_cell_type(ax=ax)
+    fig.savefig(os.path.join(figfolder, 'fig3-CD.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-CD.pdf'), dpi=300)
+        
     # panel A 
     example_file = os.path.join(
         datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
@@ -1048,3 +1028,70 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plt.close()
     
    
+def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
+    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}.json'))
+    pairs = pairs[pairs[f'inclusion_{stim}']]
+    pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
+    pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
+    ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='k', edgecolor='w')
+    ax.plot([0, 40], [0, 40], 'k')
+    ax.set_xlim([0, 25])
+    ax.set_ylim([0, 25])
+    ax.set_xlabel('nonNE spike efficacy (%)')
+    ax.set_ylabel('NE spike efficacy (%)')
+
+    _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
+    print('p =', p)
+    ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
+    
+    
+def plot_waveform_ptd(datafolder='E:\Congcong\Documents\data\connection\data-pkl', region='A1', 
+                      ax=None, savefolder=None):
+    files = glob.glob(os.path.join(datafolder, '*fs20000.pkl'))
+    tpd = []
+    for file in files:
+        depth = int(re.search('\d+(?=um)', file).group(0))
+        if region == 'MGB' and depth < 3000:
+            continue
+        elif region == 'A1' and depth > 2000:
+            continue
+        
+        with open(file, 'rb') as f:
+            session = pickle.load(f)
+        
+        for unit in session.units:
+            tpd.append(unit.waveform_tpd)
+    if ax is  None:
+        fig = plt.figure(figsize=[2, 2])
+        ax = fig.add_axes([.1, .1, .8, .8])
+    ax.hist(tpd, np.arange(0, .5, .05), color=tpd_color[1])
+    ax.hist(tpd, np.arange(.45, 1.5, .05), color=tpd_color[0])
+    ax.plot([.45, .45], [0, 80], 'k--')
+    ax.set_xlabel('Trough-Peak delay (ms)')
+    ax.set_ylabel('# of neurons')
+    ax.set_xlim([0, 1.5])
+    ax.set_ylim([0, 80])
+
+    if savefolder:
+        fig.savefig(os.path.join(savefolder, f'tpd-{region}.jpg'), bbox_inches='tight', dpi=300)
+
+def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
+    file = glob.glob(os.path.join(datafolder, f'ne-pairs-{stim}.json'))[0]
+    pairs = pd.read_json(file)
+    pairs = pairs[pairs[f'inclusion_{stim}']]
+    pairs = pairs[(pairs[f'efficacy_ne_{stim}'] > 0) & (pairs[f'efficacy_nonne_{stim}'] > 0)]
+    pairs['waveform_ns'] = pairs.target_waveform_tpd < .45
+    pairs['efficacy_gain'] = (pairs[f'efficacy_ne_{stim}'] / pairs[f'efficacy_nonne_{stim}'] - 1) * 100
+    boxplot_scatter(ax, x='waveform_ns', y='efficacy_gain', data=pairs, size=5, jitter=.3,
+                    order=[False, True], hue='waveform_ns', palette=tpd_color[:2], hue_order=[False, True])
+    ax.set_xticklabels(['BS', 'NS'])
+    ax.set_xlabel('A1 neuron type')
+    ax.set_ylabel('Efficacy gain (%)')
+    
+    _, p = stats.mannwhitneyu(pairs[pairs.waveform_ns][f'efficacy_gain'], 
+                              pairs[~pairs.waveform_ns][f'efficacy_gain'])
+    print('p =', p)
+    plot_significance_star(ax, p, [0, 1], 290, 300)
+    ax.plot([-.5, 1.5], [0, 0], 'k--')
+    ax.set_ylim([-100, 300])
+    ax.set_xlim([-.5, 1.5])
