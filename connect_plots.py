@@ -1029,11 +1029,12 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     
    
 def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
-    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}.json'))
-    pairs = pairs[pairs[f'inclusion_{stim}']]
+    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-perm-test-{stim}.json'))
     pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
     pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
-    ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='k', edgecolor='w')
+    ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='grey', edgecolor='w')
+    pairs_sig = pairs[pairs.efficacy_diff_p < .05]
+    ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color='r', edgecolor='w')
     ax.plot([0, 40], [0, 40], 'k')
     ax.set_xlim([0, 25])
     ax.set_ylim([0, 25])

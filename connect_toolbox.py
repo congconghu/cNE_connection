@@ -14,6 +14,7 @@ import re
 import pickle
 import json
 import itertools
+import random
 
 import numpy as np
 import pandas as pd
@@ -26,6 +27,9 @@ import ne_toolbox as netools
 
 
 def load_input_target_files(datafolder, file_id):
+    if not isinstance(file_id, str):
+        file_id = str(file_id)
+        file_id = file_id[:6] + '_' + file_id[6:]
     input_target_files = glob.glob(os.path.join(datafolder, f'{file_id}*fs20000.pkl'))
     assert(len(input_target_files) == 2)
     for file in input_target_files:
@@ -429,11 +433,11 @@ def update_efficacy(pairs, field_id):
         ccg_filtered = np.array(pair['ccg_filtered' + field_id])
         taxis = np.array(pair.taxis)
         nspk = pair['nspk' + field_id]
-        efficacy.append(get_efficacy(ccg, ccg_filtered, nspk, taxis))
+        efficacy.append(get_efficacy(ccg, nspk, taxis))
     pairs['efficacy' + field_id] = efficacy
     return pairs
 
-def get_efficacy(ccg, ccg_filtered, nspk, taxis, method='peak'):
+def get_efficacy(ccg, nspk, taxis, method='peak'):
     causal_idx = get_causal_spike_idx(ccg, method)
     baseline = get_causal_spk_baseline(ccg, causal_idx)
     try:
@@ -740,4 +744,63 @@ def batch_get_position_idx(datafolder=r'E:\Congcong\Documents\data\connection\da
             session = pickle.load(f)
         session.get_position_idx()
         session.save_pkl_file(file)
+
+
+def batch_get_effiacay_change_significance(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+        stim='spon'):
+    pair_file = os.path.join(summary_folder, f'ne-pairs-{stim}.json')
+    pairs = pd.read_json(pair_file)
+    pairs = pairs[pairs[f'inclusion_{stim}']]
+    exp_loaded = None
+    pairs_included = []
+    for i in range(len(pairs)):
+        print('{} / {}'.format(i + 1, len(pairs)))
+        pair = pairs.iloc[i].copy(deep=True)
+        exp = pair.exp
+        exp = str(exp)
+        exp = exp[:6] + '_' + exp[6:] 
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp_loaded = exp
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        pair = get_efficacy_change_significance(pair, input_unit, target_unit, stim=stim)
+        pairs_included.append(pair)
+    pairs_included = pd.DataFrame(pairs_included)
+    pairs_included.reset_index(inplace=True, drop=True)
+    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json'))
+
+
+def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon', nreps=1000):
+    s = stim.split("_")[0]
+
+    # get input and target spike times
+    target_spiketimes = eval(f'target_unit.spiketimes_{s}')
+    input_spiketimes = eval(f'input_unit.spiketimes_{s}')
+    if 'ss' in stim:
+        isi = get_isi(input_spiketimes)
+        input_spiketimes = input_spiketimes[isi > 20]
+    ccg, edges, nspk = get_ccg(input_spiketimes, target_spiketimes)
     
+    # permutation test
+    nspk_ne = pair[f'nspk_ne_{stim}']
+    efficacy_perm = {'ne': np.zeros(nreps), 'nonne': np.zeros(nreps)}
+    input_spiketimes = sorted(input_spiketimes)
+    for i in range(nreps):
+        input_spiketimes_ne = random.sample(input_spiketimes, nspk_ne)
+        ccg_ne, edges, _ = get_ccg(input_spiketimes_ne, target_spiketimes)
+        taxis = (edges[:-1] + edges[1:]) / 2
+        efficacy_perm['ne'][i] = get_efficacy(ccg_ne, nspk_ne, taxis)
+        efficacy_perm['nonne'][i] = get_efficacy(ccg - ccg_ne, nspk - nspk_ne, taxis)
+ 
+    efficacy_diff = efficacy_perm['ne'] - efficacy_perm['nonne']
+    p =  sum(efficacy_diff > (pair[f'efficacy_ne_{stim}'] - pair[f'efficacy_nonne_{stim}'])) / nreps
+    if p > .5:
+        p = 1 - p
+    p = p * 2
+    pair['efficacy_ne_perm'] = efficacy_perm['ne']
+    pair['efficacy_nonne_perm'] = efficacy_perm['nonne']
+    pair['efficacy_diff_p'] = p
+    return pair
