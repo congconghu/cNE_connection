@@ -896,6 +896,8 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
     assert( len(input_spiketimes_hiact) + len(input_spiketimes_lowact) == len(input_spiketimes))
     ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
     taxis = (edges[:-1] + edges[1:]) / 2
+    pair['ccg_hiact'] = ccg
+    pair['nspk_hiact'] = nspk
     pair['efficacy_hiact'] = get_efficacy(ccg, nspk, taxis)
     ccg, edges, nspk = get_ccg(input_spiketimes_lowact, target_spiketimes)
     pair['efficacy_lowact'] = get_efficacy(ccg, nspk, taxis)

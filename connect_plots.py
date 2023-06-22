@@ -420,6 +420,54 @@ def batch_plot_strf(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
             session = pickle.load(f)
         session.plot_strf(figfolder=figfolder)
     
+
+def batch_plot_ne_coincidence_spk_ccg(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
+        summaryfolder=r'E:\Congcong\Documents\data\connection\data-summary', 
+        figfolder=r'E:\Congcong\Documents\data\connection\figure\ne_coincidence_ccg',
+        stim='spon'):
+    pairs = pd.read_json(os.path.join(summaryfolder, f'ne-pairs-act-level-{stim}.json'))
+    pairs_sig = pairs[(pairs.efficacy_diff_p < .05) & 
+                      (pairs[f'efficacy_ne_{stim}']  > pairs[f'efficacy_nonne_{stim}'])] 
+    exp = None
+    fields = fields=[f'ccg_neuron_{stim}', 'ccg_hiact', f'ccg_ne_{stim}']
+    for i in range(len(pairs_sig)):
+        pair = pairs_sig.iloc[i]
+        fig = plot_ne_coincidence_spk_ccg(pair, fields)
+        fig.savefig(os.path.join(figfolder, '{}-{}-cne{}-MGB{}-A1{}.jpg'.format(
+            stim, pair.exp, pair.cne, pair.input_unit, pair.target_unit)), dpi=300)
+        plt.close()
+
+def plot_ne_coincidence_spk_ccg(pair, fields):
+    fig = plt.figure(figsize=[8.5*cm, 4*cm])
+    x_start = .15
+    y_start = .2
+    x_fig = .25
+    x_space = .05
+    y_fig = .6
+    y_space = 0
+    axes = add_multiple_axes(fig, 1, 3, x_start, y_start, x_fig, y_fig, x_space, y_space)
+    axes = axes[0]
+    peak_fr = []
+    for i, field in enumerate(fields):
+        ccg = np.array(pair[field])
+        nspk_field = re.sub('ccg', 'nspk', field)
+        nspk = np.array(pair[nspk_field])
+        peak_fr.append(
+            plot_ccg(axes[i], ccg, None, nspk=nspk, xlim=[-25, 25])
+            )
+        axes[i].set_title('{:.2f}'.format(pair[re.sub('ccg', 'efficacy', field)]))
+    peak_fr = max(peak_fr) * 1.1
+    for i in range(3):
+        axes[i].set_ylim([0, peak_fr])
+        if i > 0:
+            axes[i].set_ylabel('')
+            axes[i].set_yticklabels([])
+        if i != 1:
+            axes[i].set_xlabel('')
+    return fig
+
+
     
 # ------------------------------------ figure plots ----------------------------------------------
 def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl', 
@@ -990,8 +1038,12 @@ def plot_delta_dfficacy_ne_vs_hiact(ax, datafolder=r'E:\Congcong\Documents\data\
     _, p = stats.wilcoxon(pairs.efficacy_diff_ne,
                           pairs.efficacy_diff_act)
     print('Wilcoxon: p =', p)
-    plot_significance_star(ax, p, [0, 1], 14, 14.5)
-    ax.set_ylim([0, 15])
+    if 'ss' in stim:
+        plot_significance_star(ax, p, [0, 1], 19, 19.5)
+        ax.set_ylim([0, 20])
+    else:
+        plot_significance_star(ax, p, [0, 1], 14, 14.5)
+        ax.set_ylim([0, 15])
 
     ax.set_xlabel('')
     ax.set_xticks([0, 1])
