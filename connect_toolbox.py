@@ -41,6 +41,7 @@ def load_input_target_files(datafolder, file_id):
             target_units = session.units
     return input_target_files, input_units, target_units, session.trigger
 
+
 def load_input_target_session(datafolder, file_id):
     input_target_files = glob.glob(os.path.join(datafolder, f'{file_id}*fs20000.pkl'))
     assert(len(input_target_files) == 2)
@@ -52,6 +53,7 @@ def load_input_target_session(datafolder, file_id):
         else:
             target_session = session
     return input_target_files, input_session, target_session
+
 
 def batch_save_connection_pairs(datafolder:str=r'E:\Congcong\Documents\data\connection\data-pkl', 
                                 savefolder:str=r'E:\Congcong\Documents\data\connection\data-pkl',
@@ -174,11 +176,13 @@ def get_isi(spiketimes:np.array):
     isi = [min(isi[i:i+2]) for i in range(len(isi)-1)]
     return np.array(isi)
 
+
 def get_causal_window_idx(ccg:np.array, binsize=.5, window=[1, 5]):
     ccg = np.array(ccg)
     idx_t0 = ccg.shape[0] // 2
     idx_delay_window = np.arange(idx_t0 + window[0]/binsize, idx_t0 + window[1]/binsize).astype(int)
     return idx_delay_window
+
 
 def check_connection(ccg, stim, binsize=.5, alpha=.999):
     
@@ -215,6 +219,7 @@ def get_baseline(ccg, binsize=.5, method='gaussian'):
     elif method == 'bandpass':
         baseline =  butter_lowpass_filter(ccg, 20, fs=1e3/binsize)
     return baseline
+
 
 def check_consecutive_above_thresh(ccg, thresh, idx_delay_window, idx_peak, method=None):
     if method == 'peak':
@@ -279,6 +284,7 @@ def get_connected_pairs(input_units, target_units, triggers, window_size=50, bin
                     pairs = pd.concat([pairs, pd.DataFrame(new_pair)], ignore_index=True)
                      
     return pairs
+
 
 def refine_connected_pairs(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl\connect-filter-old', 
                            savefolder=r'E:\Congcong\Documents\data\connection\data-pkl\connect-filter'):
@@ -353,6 +359,7 @@ def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\da
                         nepairs = pd.concat([nepairs, pd.DataFrame(new_pair)], ignore_index=True)
     return nepairs
     
+
 def get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim='spon'):
     s = stim.split("_")[0]
 
@@ -384,6 +391,7 @@ def get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim='spon'):
     pair.update({f'nspk_nonne_{stim}': nspk_neuron - nspk_ne})
     
     return pair
+
 
 def batch_get_baseline_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', stim='spon'):
     files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
@@ -417,6 +425,7 @@ def batch_get_efficacy_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection
             pairs = update_efficacy(pairs, f'_{unit_type}_{stim}')
         pairs.to_json(file)
 
+
 def batch_get_efficacy(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'):
     files = glob.glob(os.path.join(datafolder, f'*-pairs.json'))
     for file in files:
@@ -424,6 +433,7 @@ def batch_get_efficacy(datafolder=r'E:\Congcong\Documents\data\connection\data-p
         for stim in ('dmr', 'dmr_ss', 'spon', 'spon_ss'):
             pairs = update_efficacy(pairs, f'_{stim}')
         pairs.to_json(file)
+
 
 def update_efficacy(pairs, field_id):
     efficacy = []
@@ -437,6 +447,7 @@ def update_efficacy(pairs, field_id):
     pairs['efficacy' + field_id] = efficacy
     return pairs
 
+
 def get_efficacy(ccg, nspk, taxis, method='peak'):
     causal_idx = get_causal_spike_idx(ccg, method)
     baseline = get_causal_spk_baseline(ccg, causal_idx)
@@ -446,13 +457,15 @@ def get_efficacy(ccg, nspk, taxis, method='peak'):
         n_causal_spk = 0
     return n_causal_spk / nspk * 100
 
+
 def get_causal_spike_idx(ccg, method='peak'):
     if method == 'peak':
-        idx_peak = np.argmax(ccg)
+        idx_peak = np.argmax(ccg[100:110]) + 100
         causal_idx = np.array(range(idx_peak - 3, idx_peak + 5))
     elif method == 'window':
         causal_idx = get_causal_window_idx(ccg)
     return causal_idx
+
 
 def get_causal_spk_baseline(ccg, causal_spk_idx):
     causal_baseline = list(range(causal_spk_idx[0]-4, causal_spk_idx[0])) \
@@ -461,6 +474,7 @@ def get_causal_spk_baseline(ccg, causal_spk_idx):
         return np.mean(ccg[causal_baseline])
     except IndexError:
         return None
+
 
 def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', stim='spon'):
     files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
@@ -478,7 +492,7 @@ def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
                     include_tmp = False
                     include.append(include_tmp)
                     break
-            # check if any of the ccg indicate functional connection
+             # check if any of the ccg indicate functional connection
             if include_tmp:
                 for unit_type in ('neuron', 'ne'):
                     ccg = np.array(pair[f'ccg_{unit_type}_{stim}'])
@@ -488,6 +502,7 @@ def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
                 include.append(include_tmp)
         pairs[f'inclusion_{stim}'] = include
         pairs.to_json(file)
+
 
 def get_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
                            savefolder=r'E:\Congcong\Documents\data\connection\data-summary'):
@@ -687,6 +702,7 @@ def combine_pair_file(datafolder=r'E:\Congcong\Documents\data\connection\data-pk
     pairs.to_json(os.path.join(savefolder, 'pairs.json'))
     print('combined file saved at {}'.format(os.path.join(savefolder, 'pairs.json')))
     
+    
 def combine_df(file_id, savename, 
                datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
                savefolder=r'E:\Congcong\Documents\data\connection\data-summary'):
@@ -750,9 +766,13 @@ def batch_get_effiacay_change_significance(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
         stim='spon'):
+    s = stim.split('_')[0]
     pair_file = os.path.join(summary_folder, f'ne-pairs-{stim}.json')
+    inclusion_file = os.path.join(summary_folder, f'ne-pairs-{s}.json')
+    inclusion = pd.read_json(inclusion_file)
     pairs = pd.read_json(pair_file)
-    pairs = pairs[pairs[f'inclusion_{stim}']]
+    # for ss spikes get the same pairs as all spikes
+    pairs = pairs[inclusion[f'inclusion_{s}'] & (inclusion[f'efficacy_ne_{s}'] > 0) & (inclusion[f'efficacy_nonne_{s}'] > 0)]
     exp_loaded = None
     pairs_included = []
     for i in range(len(pairs)):
@@ -803,4 +823,80 @@ def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon',
     pair['efficacy_ne_perm'] = efficacy_perm['ne']
     pair['efficacy_nonne_perm'] = efficacy_perm['nonne']
     pair['efficacy_diff_p'] = p
+    return pair
+
+
+def batch_get_effiacay_coincident_spk(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+        stim='spon'):
+    pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
+    pairs = pd.read_json(pair_file)
+    exp_loaded = None
+    pairs_included = []
+    for i in range(len(pairs)):
+        print('{} / {}'.format(i + 1, len(pairs)))
+        pair = pairs.iloc[i].copy(deep=True)
+        exp = pair.exp
+        exp = str(exp)
+        exp = exp[:6] + '_' + exp[6:] 
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp_loaded = exp
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim=stim)
+        pairs_included.append(pair)
+    pairs_included = pd.DataFrame(pairs_included)
+    pairs_included.reset_index(inplace=True, drop=True)
+    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-act-level-{stim}.json'))
+
+
+def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim='spon'):
+    s = stim.split("_")[0]
+
+    # get input and target spike times
+    target_spiketimes = eval(f'target_unit.spiketimes_{s}')
+    input_spiketimes = eval(f'input_unit.spiketimes_{s}')
+    if 'ss' in stim:
+        isi = get_isi(input_spiketimes)
+        input_spiketimes = input_spiketimes[isi > 20]
+    ccg, edges, nspk = get_ccg(input_spiketimes, target_spiketimes)
+    
+    # get spikes times when random spikes in the recording happens within 10ms 
+    context_spiketimes = []
+    for i in range(len(input_units)):
+        if i != pair.input_idx:
+            context_spiketimes.append(eval(f'input_units[i].spiketimes_{s}'))
+    context_spiketimes = np.concatenate(context_spiketimes)
+    context_spiketimes.sort()
+    input_spiketimes_hiact = []
+    input_spiketimes_lowact = []
+    p1, p2 = 0, 0
+    while p1 < len(input_spiketimes):
+        if context_spiketimes[p2] < input_spiketimes[p1]:
+            if input_spiketimes[p1] - context_spiketimes[p2] > 10:
+                # context spike in front of input spike and distance > 10ms
+                if p2 < len(context_spiketimes) - 1:
+                    p2 += 1
+                else:
+                    input_spiketimes_lowact.append(input_spiketimes[p1])
+                    p1 += 1
+            else:
+                input_spiketimes_hiact.append(input_spiketimes[p1])
+                p1 += 1
+        else:
+            if input_spiketimes[p1] - context_spiketimes[p2] < -10:
+                # context spike in front of input spike and distance > 10ms
+                input_spiketimes_lowact.append(input_spiketimes[p1])
+                p1 += 1
+            else:
+                input_spiketimes_hiact.append(input_spiketimes[p1])
+                p1 += 1
+    assert( len(input_spiketimes_hiact) + len(input_spiketimes_lowact) == len(input_spiketimes))
+    ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
+    taxis = (edges[:-1] + edges[1:]) / 2
+    pair['efficacy_hiact'] = get_efficacy(ccg, nspk, taxis)
+    ccg, edges, nspk = get_ccg(input_spiketimes_lowact, target_spiketimes)
+    pair['efficacy_lowact'] = get_efficacy(ccg, nspk, taxis)
     return pair
