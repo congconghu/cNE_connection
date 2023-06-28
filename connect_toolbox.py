@@ -845,7 +845,8 @@ def batch_get_effiacay_coincident_spk(
             exp_loaded = exp
         input_unit = input_units[pair.input_idx]
         target_unit = target_units[pair.target_idx]
-        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim=stim)
+        input_units_tmp = input_units[:pair.input_idx] + input_units[pair.input_idx+1:]
+        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units_tmp, stim=stim)
         pairs_included.append(pair)
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
@@ -866,8 +867,7 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
     # get spikes times when random spikes in the recording happens within 10ms 
     context_spiketimes = []
     for i in range(len(input_units)):
-        if i != pair.input_idx:
-            context_spiketimes.append(eval(f'input_units[i].spiketimes_{s}'))
+        context_spiketimes.append(eval(f'input_units[i].spiketimes_{s}'))
     context_spiketimes = np.concatenate(context_spiketimes)
     context_spiketimes.sort()
     input_spiketimes_hiact = []
@@ -902,3 +902,37 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
     ccg, edges, nspk = get_ccg(input_spiketimes_lowact, target_spiketimes)
     pair['efficacy_lowact'] = get_efficacy(ccg, nspk, taxis)
     return pair
+
+
+def batch_get_effiacay_pairwise_spk(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+        stim='spon'):
+    pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
+    pairs = pd.read_json(pair_file)
+    exp_loaded = None
+    pairs_included = []
+    for i in range(len(pairs)):
+        print('{} / {}'.format(i + 1, len(pairs)))
+        pair = pairs.iloc[i].copy(deep=True)
+        exp = pair.exp
+        exp = str(exp)
+        exp = exp[:6] + '_' + exp[6:] 
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*ne-20dft-spon.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                nedata = pickle.load(f)
+            spktrain = nedata.spktrain
+            exp_loaded = exp
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        members = nedata.ne_members[pair.cne]
+        members = [member for member in members if member != pair.input_idx]
+        corr = np.corrcoef(spktrain[pair.input_idx], spktrain[members])[0][1:]
+        corr_unit =  input_units[members[np.argmax(corr)]]
+        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, [corr_unit], stim=stim)
+        pairs_included.append(pair)
+    pairs_included = pd.DataFrame(pairs_included)
+    pairs_included.reset_index(inplace=True, drop=True)
+    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-pairwise-{stim}.json'))
