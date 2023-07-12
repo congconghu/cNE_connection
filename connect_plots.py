@@ -468,6 +468,39 @@ def plot_ne_coincidence_spk_ccg(pair, fields):
     return fig
 
 
+def batch_plot_common_target_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+                                 figfolder=r'E:\Congcong\Documents\data\connection\figure\ccg_common_target'):
+    # plot CCGs of MGB neurons that share A1 target or not 
+    data = pd.read_json(os.path.join(datafolder, 'pairs_common_target_corr.json'))
+    for i in range(len(data)):
+        pair = data.iloc[i]
+        fig = plt.figure()
+        ax = fig.add_axes([.1, .1, .8, .8])
+        plot_ccg(ax, np.array(pair.ccg), None, None)
+        ax.set_xlim([-40, 40])
+        if pair.target > 0:
+            fig.savefig(os.path.join(figfolder, f'{pair.exp}_MGB_{pair.input1}_{pair.input2}_A1_{pair.target}.jpg'))
+        else:
+            fig.savefig(os.path.join(figfolder, f'None_share_{pair.exp}_MGB_{pair.input1}_{pair.input2}.jpg'))
+        plt.close()
+
+def batch_plot_common_target_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+                                 figfolder=r'E:\Congcong\Documents\data\connection\figure\ccg_ne_members'):
+    # plot CCGs of MGB neurons that share A1 target or not 
+    data = pd.read_json(os.path.join(datafolder, 'member_nonmember_pair_xcorr.json'))
+    data = data[(data.stim == 'spon') & (data.region == 'MGB')]
+    for i in range(len(data)):
+        pair = data.iloc[i]
+        fig = plt.figure()
+        ax = fig.add_axes([.1, .1, .8, .8])
+        plot_ccg(ax, np.array(pair.xcorr)[101: -100], None, None)
+        ax.set_xlim([-25, 25])
+        if pair.member:
+            fig.savefig(os.path.join(figfolder, f'{pair.exp}_MGB_{pair.idx1}_{pair.idx2}.jpg'))
+        else:
+            fig.savefig(os.path.join(figfolder, f'Nonmember_{pair.exp}_MGB_{pair.idx1}_{pair.idx2}.jpg'))
+        plt.close()
+        
     
 # ------------------------------------ figure plots ----------------------------------------------
 def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl', 
@@ -586,8 +619,6 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     x_fig = .2
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     batch_plot_fr(ax)
-    
-    
     #fig.savefig(os.path.join(figfolder, 'fig1.jpg'), dpi=300)
     #fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
 
@@ -647,6 +678,7 @@ def batch_scatter_bf(ax, datafolder='E:\Congcong\Documents\data\connection\data-
     ax.set_ylabel('A1 neuron BF (kHz)')
     print('n(ccg_{}) = {}'.format(stim, sum(idx)))
     
+    
 def batch_plot_fr(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary'):
     with open(os.path.join(datafolder, 'fr_all.json'), 'r') as f:
         data = json.load(f)
@@ -674,6 +706,42 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     
     fig = plt.figure(figsize=[11.6*cm, 12*cm])
     
+    # PART1: correlation of MGB neuros sharing A1 targets
+    # example CCG MGB neuronal pairs
+    example_file = os.path.join(r'E:\Congcong\Documents\data\connection\data-pkl',
+                                r'200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000.pkl')
+    with open(example_file, 'rb') as f:
+        session = pickle.load(f)
+    input1 = session.spktrain_spon[0][0]
+    input1 = (input1 - input1.mean()) / input1.std()
+    input1 = input1[50:-50]
+    # example1
+    x_start = .1
+    y_start = .85
+    x_fig = .15
+    y_fig = .1
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
+    input2 = session.spktrain_spon[0][15]
+    input2 = (input2 - input2.mean()) / input2.std()
+    corr = np.correlate(input1, input2) / len(input2)
+    taxis = np.arange(-25, 25.1, .5)
+    ax.bar(taxis, corr, color='k')
+    ax.set_xlim([-25, 25])
+    ax.set_ylim([-.005, .04])
+    ax.set_yticks([0, .02, .04])
+    ax.set_xticklabels([])
+    #example2
+    y_start = .72
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
+    input2 = session.spktrain_spon[0][7]
+    input2 = (input2 - input2.mean()) / input2.std()
+    corr = np.correlate(input1, input2) / len(input2)
+    ax.bar(taxis, corr, color='k')
+    ax.set_xlim([-25, 25])
+    ax.set_ylim([-.005, .04])
+    ax.set_yticks([0, .02, .04])
+    ax.set_xlabel('Lag (ms)')
+    ax.set_ylabel('Correlation')
     # plot corr of pairs of neurons sharing common target
     x_start = .7
     y_start = .7
@@ -682,8 +750,40 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_corr_common_target(ax=ax)
     
+    # PART2: correlation of cNE members and nonmembers
+    input1 = session.spktrain_spon[0][8]
+    input1 = (input1 - input1.mean()) / input1.std()
+    input1 = input1[50:-50]
+    # example1
+    x_start = .1
+    y_start = .55
+    x_fig = .15
+    y_fig = .1
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
+    input2 = session.spktrain_spon[0][15]
+    input2 = (input2 - input2.mean()) / input2.std()
+    corr = np.correlate(input1, input2) / len(input2)
+    taxis = np.arange(-25, 25.1, .5)
+    ax.bar(taxis, corr, color='k')
+    ax.set_xlim([-25, 25])
+    ax.set_ylim([-.0025, .02])
+    ax.set_yticks([0, .01, .02])
+    ax.set_xticklabels([])
+    #example2
+    y_start = .42
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
+    input2 = session.spktrain_spon[0][11]
+    input2 = (input2 - input2.mean()) / input2.std()
+    corr = np.correlate(input1, input2) / len(input2)
+    ax.bar(taxis, corr, color='k')
+    ax.set_xlim([-25, 25])
+    ax.set_ylim([-.0025, .02])
+    ax.set_yticks([0, .01, .02])
+    ax.set_xlabel('Lag (ms)')
+    ax.set_ylabel('Correlation')
     # plot cNE member corr
     y_start = .4
+    x_start = .7
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_corr_ne_members(ax=ax)
     
@@ -692,20 +792,9 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_prob_share_target(ax=ax)
     fig.savefig(os.path.join(figfolder, 'fig2.jpg'), dpi=300)
-    #fig.savefig(os.path.join(figfolder, 'fig2.pdf'), dpi=300)
-    
-    # plot example CCG
-    x_start = .1
-    x_fig = .2
-    y_fig = .1
-    y_space = .02
-    y_start = .7
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    ax = fig.add_axes([x_start, y_start + y_fig + y_space, x_fig, y_fig])
+    fig.savefig(os.path.join(figfolder, 'fig2.pdf'), dpi=300)
 
 
-    
-    
 def plot_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
                             group='exp', ax=None, savefolder=None):
     file = os.path.join(datafolder,'pairs_common_target_corr.json')

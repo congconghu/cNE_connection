@@ -506,12 +506,14 @@ def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
 
 def get_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
                            savefolder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    # the 10ms binned correlation and 1ms binned CCG of MGB neurons
+    # if the pair do not share A1 target, A1 target is labeled -1
     files = glob.glob(os.path.join(datafolder, '*pairs.json'))
     pairs_corr_all = None
     for file in files:
         pairs = pd.read_json(file)
         multi_input = pairs.groupby('target_idx')['input_idx'].count() > 1
-        multi_input = list(multi_input[multi_input].index)
+        multi_input = list(multi_input[multi_input].index) # get A1 target neurons with multiple MGB inputs
         if any(multi_input):
             su_file = os.path.join(datafolder, re.sub('-pairs.json', '.pkl', file))
             with open(su_file, 'rb') as f:
@@ -535,6 +537,13 @@ def get_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\da
             corr = np.corrcoef(spktrain)
             pairs_corr['corr'] = corr[pairs_corr.input1, pairs_corr.input2]
             pairs_corr['exp'] = re.search('\d{6}_\d{6}', file).group(0)
+            ccg_all = []
+            for _, pair in pairs_corr.iterrows():
+                spiketimes1 = session.units[pair.input1].spiketimes_spon
+                spiketimes2 = session.units[pair.input2].spiketimes_spon
+                ccg, edges, nspk = get_ccg(spiketimes1, spiketimes2)
+                ccg_all.append(ccg)
+            pairs_corr['ccg'] = ccg_all
             if  pairs_corr_all is None:
                 pairs_corr_all = pairs_corr
             else:
