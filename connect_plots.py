@@ -207,14 +207,28 @@ def plot_pair_waveform_strf_ccg(pair, input_unit, target_unit, tlim = [100, 0]):
             axes[1].set_ylabel('')
         else:
             axes[1].set_xlabel('')
+        
+        ax = fig.add_axes([x_start[i], .42, .4, .18])
+        acg, _, _ = ct.get_ccg(unit.spiketimes, unit.spiketimes)
+        acg[100] = 0
+        plot_ccg(ax, acg, None, causal=False)
+        ax.set_xlim([-20, 20])
+        
     # plot ccg
-    ax = fig.add_axes([.1, .1, .6, .3])
+    ax = fig.add_axes([.1, .1, .4, .2])
     ccg = np.array(pair.ccg_spon)
     baseline = np.array(pair.baseline_spon)
     thresh = np.array(pair.thresh_spon)
     plot_ccg(ax, ccg, baseline)
+    ax.set_title('MGB = {}; A1 = {}'.format(len(input_unit.spiketimes_spon), len(target_unit.spiketimes_spon)))
+    ax = fig.add_axes([.6, .1, .4, .2])
     ccg = np.array(pair.ccg_dmr)
-    
+    baseline = np.array(pair.baseline_dmr)
+    thresh = np.array(pair.thresh_dmr)
+    plot_ccg(ax, ccg, baseline)
+    ax.set_title('MGB = {}; A1 = {}'.format(len(input_unit.spiketimes_dmr), len(target_unit.spiketimes_dmr)))
+
+
   
 def plot_waveform(ax, waveform_mean, waveform_std, color='k', color_shade='lightgrey', tpd=None):
     if tpd:
@@ -544,7 +558,7 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
         strf = np.array(unit.strf)
         
         vmax=np.max(abs(strf))
-        im = plot_strf(axes[1], strf, taxis=unit.strf_taxis, faxis=unit.strf_faxis, 
+        im = plot_strf(axes[1], strf, taxis=unit.strf_taxis, faxis=unit.strf_faxis, flabels_arr = np.array([2, 8, 32]),
                        tlim=tlim, flim=flim, vmax=vmax, bf=unit.bf, latency=unit.latency)
         print(unit.bf/1000)
         # add colorbar for strf
@@ -915,30 +929,7 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
 
 def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
-
-    # panel C and D
-    fig = plt.figure(figsize=[figure_size[0][0], 5*cm])
-    x_start = .1
-    y_start = .2
-    x_fig = .2
-    y_fig = .6
-    # panel C: NE vs nonNE spike efficacy
-    print('C')
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax)
-    # panel D-i: BS/NS neurons
-    print('D')
-    x_start = .4
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_waveform_ptd(ax=ax)
-    # panel D-ii: BS/NS neurons
-    x_start = .7
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_gain_cell_type(ax=ax)
-    fig.savefig(os.path.join(figfolder, 'fig3-CD.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-CD.pdf'), dpi=300)
     
-    # panel A 
     example_file = os.path.join(
         datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
     nepairs = pd.read_json(example_file)
@@ -960,8 +951,8 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         ax.set_ylim([0, 200])
         ax.set_yticks(range(0, 201, 50))
         ax.set_yticklabels([0, '', 100, '', 200])
-    fig.savefig(os.path.join(figfolder, 'fig3-A1.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-A1.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-1.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-1.pdf'), dpi=300)
     # cNE2-A1_43
     target_idx = 38
     fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
@@ -973,11 +964,13 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         ax.set_ylim([0, 150])
         ax.set_yticks(range(0, 151, 50))
         ax.set_yticklabels(range(0, 151, 50))
-    fig.savefig(os.path.join(figfolder, 'fig3-A2.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-A2.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-2.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3-2.pdf'), dpi=300)
     plt.close()
-    
-    # panel B
+
+
+def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
     example_file = os.path.join(
         datafolder, '220825_005353-site6-5500um-25db-dmr-61min-H31x64-fs20000-pairs-ne-spon.json')
     nepairs = pd.read_json(example_file)
@@ -1001,8 +994,8 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         ax.set_ylim([0, 15])
         ax.set_yticks(range(0, 16, 5))
         ax.set_yticklabels(range(0, 16, 5))
-    fig.savefig(os.path.join(figfolder, 'fig3-B2.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-B2.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig4-2.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig4-2.pdf'), dpi=300)
     plt.close()
     # cNE4-A1_149
     cne = 4
@@ -1016,19 +1009,61 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         ax.set_ylim([0, 50])
         ax.set_yticks(range(0, 51, 25))
         ax.set_yticklabels(range(0, 51, 25))
-    fig.savefig(os.path.join(figfolder, 'fig3-B1.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-B1.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig4-1.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig4-1.pdf'), dpi=300)
     plt.close()
+
+
+def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
+    
+    fig = plt.figure(figsize=[figure_size[2][0], figure_size[2][0]])
+    x_fig = .35
+    y_fig = .35
+    # panel A: BS/NS neurons
+    print('A')
+    y_start = .6
+    x_start = .1
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_waveform_ptd(ax=ax)
+    ax.set_ylabel('# of A1 neurons')
+    print('B')
+    # panel B: BS/NS neurons
+    x_start = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_efficacy_gain_cell_type(ax=ax)
+    
+    x_start = .1
+    y_start = .1
+    # panel C: NE vs nonNE spike efficacy
+    print('C')
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_efficacy_ne_vs_nonne(ax, change='increase')
+    print('D')
+    x_start = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_efficacy_ne_vs_nonne(ax, change='decrease')
+    
+    fig.savefig(os.path.join(figfolder, 'fig5.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig5.pdf'), dpi=300)
     
    
-def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
+def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon', change='increase'):
     pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-perm-test-{stim}.json'))
     if 'ss' not in stim:
         pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
         pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
+    pairs['waveform_ns'] = pairs.target_waveform_tpd < .45
     ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='grey', edgecolor='w')
-    pairs_sig = pairs[pairs.efficacy_diff_p < .05]
-    ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color='r', edgecolor='w')
+    if change == 'increase':
+        pairs = pairs[pairs[f'efficacy_ne_{stim}'] > pairs[f'efficacy_nonne_{stim}']]
+    else:
+        pairs = pairs[pairs[f'efficacy_ne_{stim}'] > pairs[f'efficacy_nonne_{stim}']]
+    pairs_sig = pairs[(pairs.efficacy_diff_p < .05) & (pairs['waveform_ns'])]
+    ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[1], edgecolor='w')
+    pairs_sig = pairs[(pairs.efficacy_diff_p < .05) & (~pairs['waveform_ns'])]
+    ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[0], edgecolor='w')
+    
     ax.plot([0, 30], [0, 30], 'k')
     ax.set_xlim([0, 30])
     ax.set_ylim([0, 30])
@@ -1098,7 +1133,7 @@ def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\conn
     ax.set_xlim([-.5, 1.5])
 
 
-def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
     fig = plt.figure(figsize=[figure_size[2][0], 4*cm])
     x_start = .1
