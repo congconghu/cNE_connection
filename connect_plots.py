@@ -498,7 +498,7 @@ def batch_plot_common_target_ccg(datafolder=r'E:\Congcong\Documents\data\connect
             fig.savefig(os.path.join(figfolder, f'None_share_{pair.exp}_MGB_{pair.input1}_{pair.input2}.jpg'))
         plt.close()
 
-def batch_plot_common_target_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+def batch_plot_ne_membership_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
                                  figfolder=r'E:\Congcong\Documents\data\connection\figure\ccg_ne_members'):
     # plot CCGs of MGB neurons that share A1 target or not 
     data = pd.read_json(os.path.join(datafolder, 'member_nonmember_pair_xcorr.json'))
@@ -515,6 +515,68 @@ def batch_plot_common_target_ccg(datafolder=r'E:\Congcong\Documents\data\connect
             fig.savefig(os.path.join(figfolder, f'Nonmember_{pair.exp}_MGB_{pair.idx1}_{pair.idx2}.jpg'))
         plt.close()
         
+
+def batch_plot_strf_ccg_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                        figfolder=r'E:\Congcong\Documents\data\connection\figure\strf_ccg_target'):
+    ccg_data = pd.read_json(os.path.join(r'E:\Congcong\Documents\data\connection\data-summary', 
+                                        'pairs_common_target_corr.json'))
+    files = glob.glob(os.path.join(datafolder, '*-fs20000.pkl'))
+    files = [file for file in files if int(re.search('(\d{4})um', file).group(1)) > 2000][6:]
+    for file in files:
+        with open(file, 'rb') as f:
+            session = pickle.load(f)
+        exp = int(''.join(session.exp.split('_')))
+        n_unit = len(session.units)
+        fig, axes = plt.subplots(n_unit, n_unit, figsize=[n_unit, n_unit])
+        plt.tight_layout()
+        for i, unit in enumerate(session.units):
+            for j in range(i, n_unit):
+                if i == j:
+                    strf = unit.strf
+                    plot_strf(axes[i][j], strf, taxis=unit.strf_taxis, faxis=unit.strf_faxis, tlim=[50, 0])
+                else:
+                    ccg = ccg_data[(ccg_data.exp == exp) 
+                                   & (ccg_data.input1 == i) 
+                                   & (ccg_data.input2 == j)]
+                    if len(ccg) > 0:
+                        plot_ccg(axes[i][j], ccg.ccg.values[0], None, None, causal=False)
+                        if ccg.target.values[0] >= 0:
+                            y = axes[i][j].get_ylim()
+                            axes[i][j].text(0, np.mean(y), '*', color='r', fontsize=20)
+        fig.savefig(os.path.join(figfolder, f'{exp}.jpg'), dpi=300)
+        plt.close()
+
+
+def batch_plot_strf_ccg_membership(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                        figfolder=r'E:\Congcong\Documents\data\connection\figure\strf_ccg_membership'):
+    ccg_data = pd.read_json(os.path.join(r'E:\Congcong\Documents\data\connection\data-summary', 
+                                        'member_nonmember_pair_xcorr.json'))
+    ccg_data = ccg_data[ccg_data.stim=='spon']
+    files = glob.glob(os.path.join(datafolder, '*-fs20000.pkl'))
+    files = [file for file in files if int(re.search('(\d{4})um', file).group(1)) > 2000]
+    for file in files:
+        with open(file, 'rb') as f:
+            session = pickle.load(f)
+        exp = int(''.join(session.exp.split('_')))
+        n_unit = len(session.units)
+        fig, axes = plt.subplots(n_unit, n_unit, figsize=[n_unit, n_unit])
+        plt.tight_layout()
+        for i, unit in enumerate(session.units):
+            for j in range(i, n_unit):
+                if i == j:
+                    strf = unit.strf
+                    plot_strf(axes[i][j], strf, taxis=unit.strf_taxis, faxis=unit.strf_faxis, tlim=[50, 0])
+                else:
+                    ccg = ccg_data[(ccg_data.exp == exp) 
+                                   & (ccg_data.idx1 == i) 
+                                   & (ccg_data.idx2 == j)]
+                    if len(ccg) > 0:
+                        plot_ccg(axes[i][j], ccg.xcorr.values[0][101:-100], None, None, causal=False)
+                        if ccg.member.values[0]:
+                            y = axes[i][j].get_ylim()
+                            axes[i][j].text(0, np.mean(y), '*', color='r', fontsize=20)
+        fig.savefig(os.path.join(figfolder, f'{exp}.jpg'), dpi=300)
+        plt.close()
     
 # ------------------------------------ figure plots ----------------------------------------------
 def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl', 
@@ -699,7 +761,7 @@ def batch_plot_fr(ax, datafolder='E:\Congcong\Documents\data\connection\data-sum
     
     color = ['k', 'grey']
     for i, region in enumerate(('MGB', 'A1')):
-        print('region')
+        print(region)
         diff = np.array(data['dmr_'+region]) - np.array(data['spon_'+region])
         ax.hist([diff], bins=np.arange(-10, 11, 1), 
                 histtype='step', density=True, linewidth=.8, color=color[i])
@@ -716,26 +778,46 @@ def batch_plot_fr(ax, datafolder='E:\Congcong\Documents\data\connection\data-sum
     ax.set_xlabel('\u0394Firing rate')
 
 
-def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
+def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
+            datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            example_file1=r'200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000.pkl',
+            example_idx1=[0, 15, 10],
+            example_file2=r'201005_213847-site5-5105um-20db-dmr-32min-H31x64-fs20000.pkl',
+            example_idx2=[5, 6, 4]):
     
     fig = plt.figure(figsize=[11.6*cm, 12*cm])
     
     # PART1: correlation of MGB neuros sharing A1 targets
     # example CCG MGB neuronal pairs
-    example_file = os.path.join(r'E:\Congcong\Documents\data\connection\data-pkl',
-                                r'200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000.pkl')
+    example_file = os.path.join(datafolder, example_file1)
+    example_idx = example_idx1
     with open(example_file, 'rb') as f:
         session = pickle.load(f)
-    input1 = session.spktrain_spon[0][0]
+     # plot strfs
+    x_start = .08
+    y_start = [.9, .8, .7]
+    y_fig = .06
+    x_fig = .07
+    for i, unit_idx in enumerate(example_idx):
+        ax = fig.add_axes([x_start, y_start[i], x_fig, y_fig])
+        plot_strf(ax, session.units[unit_idx].strf, 
+                   taxis=session.units[unit_idx].strf_taxis,
+                   faxis=session.units[unit_idx].strf_faxis, tlim=[50, 0], flim=[8,32], 
+                   flabels_arr=np.array([8, 16, 32]))
+        if i < 2:
+             ax.set_xticklabels([])
+             ax.set_ylabel('')
+        ax.set_xlabel('')
+    # example1
+    input1 = session.spktrain_spon[0][example_idx[0]]
     input1 = (input1 - input1.mean()) / input1.std()
     input1 = input1[50:-50]
-    # example1
-    x_start = .1
+    x_start = .25
     y_start = .85
-    x_fig = .15
-    y_fig = .1
+    x_fig = .1
+    y_fig = .08
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
-    input2 = session.spktrain_spon[0][15]
+    input2 = session.spktrain_spon[0][example_idx[1]]
     input2 = (input2 - input2.mean()) / input2.std()
     corr = np.correlate(input1, input2) / len(input2)
     taxis = np.arange(-25, 25.1, .5)
@@ -747,7 +829,7 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     #example2
     y_start = .72
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
-    input2 = session.spktrain_spon[0][7]
+    input2 = session.spktrain_spon[0][example_idx[2]]
     input2 = (input2 - input2.mean()) / input2.std()
     corr = np.correlate(input1, input2) / len(input2)
     ax.bar(taxis, corr, color='k')
@@ -756,25 +838,39 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     ax.set_yticks([0, .02, .04])
     ax.set_xlabel('Lag (ms)')
     ax.set_ylabel('Correlation')
-    # plot corr of pairs of neurons sharing common target
-    x_start = .7
-    y_start = .7
-    x_fig = .29
-    y_fig = .2
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_corr_common_target(ax=ax)
+   
     
     # PART2: correlation of cNE members and nonmembers
-    input1 = session.spktrain_spon[0][8]
+    example_file = os.path.join(datafolder, example_file2)
+    example_idx = example_idx2
+    with open(example_file, 'rb') as f:
+        session = pickle.load(f)
+     # plot strfs
+    x_start = .08
+    y_start = [.6, .5, .4]
+    y_fig = .06
+    x_fig = .07
+    for i, unit_idx in enumerate(example_idx):
+        ax = fig.add_axes([x_start, y_start[i], x_fig, y_fig])
+        plot_strf(ax, session.units[unit_idx].strf, 
+                   taxis=session.units[unit_idx].strf_taxis,
+                   faxis=session.units[unit_idx].strf_faxis, tlim=[50, 0], flim=[5,20], 
+                   flabels_arr=np.array([5, 10, 20]))
+        if i < 2:
+             ax.set_xticklabels([])
+             ax.set_ylabel('')
+        ax.set_xlabel('')
+    # plot ccgs
+    input1 = session.spktrain_spon[0][example_idx[0]]
     input1 = (input1 - input1.mean()) / input1.std()
     input1 = input1[50:-50]
     # example1
-    x_start = .1
+    x_start = .25
     y_start = .55
-    x_fig = .15
-    y_fig = .1
+    x_fig = .1
+    y_fig = .08
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
-    input2 = session.spktrain_spon[0][15]
+    input2 = session.spktrain_spon[0][example_idx[1]]
     input2 = (input2 - input2.mean()) / input2.std()
     corr = np.correlate(input1, input2) / len(input2)
     taxis = np.arange(-25, 25.1, .5)
@@ -786,7 +882,7 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     #example2
     y_start = .42
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
-    input2 = session.spktrain_spon[0][11]
+    input2 = session.spktrain_spon[0][example_idx[2]]
     input2 = (input2 - input2.mean()) / input2.std()
     corr = np.correlate(input1, input2) / len(input2)
     ax.bar(taxis, corr, color='k')
@@ -795,12 +891,20 @@ def figure2(figfolder = r'E:\Congcong\Documents\data\connection\paper\figure'):
     ax.set_yticks([0, .01, .02])
     ax.set_xlabel('Lag (ms)')
     ax.set_ylabel('Correlation')
+    
+    
+    # summary plots
+    # plot corr of pairs of neurons sharing common target
+    x_start = .8
+    y_start = .7
+    x_fig = .19
+    y_fig = .2
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_corr_common_target(ax=ax)
     # plot cNE member corr
     y_start = .4
-    x_start = .7
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_corr_ne_members(ax=ax)
-    
     # plot probability of cNE members sharing target
     y_start = .1
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
