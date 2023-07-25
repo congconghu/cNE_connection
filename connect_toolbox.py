@@ -771,7 +771,7 @@ def batch_get_position_idx(datafolder=r'E:\Congcong\Documents\data\connection\da
         session.save_pkl_file(file)
 
 
-def batch_get_effiacay_change_significance(
+def batch_get_effiacay_change_significance_ne_nonne(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
         stim='spon'):
@@ -800,9 +800,40 @@ def batch_get_effiacay_change_significance(
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
     pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json'))
+    
+
+def batch_get_effiacay_change_significance(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+        stim='spon', coincidence=None):
+    
+    if not coincidence:
+        batch_get_effiacay_change_significance_ne_nonne(datafolder, summary_folder, stim)
+    else:
+        s = stim.split('_')[0]
+        pair_file = os.path.join(summary_folder, f'ne-pairs-{coincidence}-{stim}.json')
+        pairs = pd.read_json(pair_file)
+        exp_loaded = None
+        pairs_included = []
+        for i in range(len(pairs)):
+            print('{} / {}'.format(i + 1, len(pairs)))
+            pair = pairs.iloc[i].copy(deep=True)
+            exp = pair.exp
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:] 
+            if exp != exp_loaded:
+                _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+                exp_loaded = exp
+            input_unit = input_units[pair.input_idx]
+            target_unit = target_units[pair.target_idx]
+            pair = get_efficacy_change_significance(pair, input_unit, target_unit, stim=stim, hiact=True)
+            pairs_included.append(pair)
+            pairs_included = pd.DataFrame(pairs_included)
+            pairs_included.reset_index(inplace=True, drop=True)
+            pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-perm-test-{coincidence}-{stim}.json'))
 
 
-def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon', nreps=1000):
+def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon', nreps=10000, hiact=False):
     s = stim.split("_")[0]
 
     # get input and target spike times
@@ -814,7 +845,10 @@ def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon',
     ccg, edges, nspk = get_ccg(input_spiketimes, target_spiketimes)
     
     # permutation test
-    nspk_ne = pair[f'nspk_ne_{stim}']
+    if hiact:
+        nspk_ne = pair[f'nspk_hiact']
+    else:
+        nspk_ne = pair[f'nspk_ne_{stim}']
     efficacy_perm = {'ne': np.zeros(nreps), 'nonne': np.zeros(nreps)}
     input_spiketimes = sorted(input_spiketimes)
     for i in range(nreps):
@@ -823,9 +857,13 @@ def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon',
         taxis = (edges[:-1] + edges[1:]) / 2
         efficacy_perm['ne'][i] = get_efficacy(ccg_ne, nspk_ne, taxis)
         efficacy_perm['nonne'][i] = get_efficacy(ccg - ccg_ne, nspk - nspk_ne, taxis)
- 
     efficacy_diff = efficacy_perm['ne'] - efficacy_perm['nonne']
-    p =  sum(efficacy_diff > (pair[f'efficacy_ne_{stim}'] - pair[f'efficacy_nonne_{stim}'])) / nreps
+    
+    if hiact:
+        p =  sum(efficacy_diff > (pair[f'efficacy_hiact'] - pair[f'efficacy_lowact'])) / nreps
+    else:
+        p =  sum(efficacy_diff > (pair[f'efficacy_ne_{stim}'] - pair[f'efficacy_nonne_{stim}'])) / nreps
+
     if p > .5:
         p = 1 - p
     p = p * 2
@@ -838,7 +876,7 @@ def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon',
 def batch_get_effiacay_coincident_spk(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
-        stim='spon'):
+        stim='spon', window=10):
     pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
     pairs = pd.read_json(pair_file)
     exp_loaded = None
@@ -855,14 +893,14 @@ def batch_get_effiacay_coincident_spk(
         input_unit = input_units[pair.input_idx]
         target_unit = target_units[pair.target_idx]
         input_units_tmp = input_units[:pair.input_idx] + input_units[pair.input_idx+1:]
-        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units_tmp, stim=stim)
+        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units_tmp, stim=stim, window=window)
         pairs_included.append(pair)
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
-    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-act-level-{stim}.json'))
+    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-act-level-{stim}-{window}ms.json'))
 
 
-def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim='spon'):
+def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, stim='spon', window=10):
     s = stim.split("_")[0]
 
     # get input and target spike times
@@ -873,10 +911,33 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
         input_spiketimes = input_spiketimes[isi > 20]
     ccg, edges, nspk = get_ccg(input_spiketimes, target_spiketimes)
     
-    # get spikes times when random spikes in the recording happens within 10ms 
+    input_spiketimes_hiact, input_spiketimes_lowact = get_hiact_spikes(input_unit, context_units, window=window)
+    
+    ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
+    taxis = (edges[:-1] + edges[1:]) / 2
+    pair['ccg_hiact'] = ccg
+    pair['nspk_hiact'] = nspk
+    pair['efficacy_hiact'] = get_efficacy(ccg, nspk, taxis)
+    ccg, edges, nspk = get_ccg(input_spiketimes_lowact, target_spiketimes)
+    pair['ccg_lowact'] = ccg
+    pair['nspk_lowact'] = nspk
+    pair['efficacy_lowact'] = get_efficacy(ccg, nspk, taxis)
+    return pair
+
+
+def get_hiact_spikes(input_unit, context_units, stim, window=10):
+    
+    # get input spikes
+    s = stim.split("_")[0]
+    input_spiketimes = eval(f'input_unit.spiketimes_{s}')
+    if 'ss' in stim:
+        isi = get_isi(input_spiketimes)
+        input_spiketimes = input_spiketimes[isi > 20]
+        
+    # get spikes times when random spikes in the recording happens within the coincidence window
     context_spiketimes = []
-    for i in range(len(input_units)):
-        context_spiketimes.append(eval(f'input_units[i].spiketimes_{s}'))
+    for i in range(len(context_units)):
+        context_spiketimes.append(eval(f'context_units[i].spiketimes_{s}'))
     context_spiketimes = np.concatenate(context_spiketimes)
     context_spiketimes.sort()
     input_spiketimes_hiact = []
@@ -884,7 +945,7 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
     p1, p2 = 0, 0
     while p1 < len(input_spiketimes):
         if context_spiketimes[p2] < input_spiketimes[p1]:
-            if input_spiketimes[p1] - context_spiketimes[p2] > 10:
+            if input_spiketimes[p1] - context_spiketimes[p2] > window:
                 # context spike in front of input spike and distance > 10ms
                 if p2 < len(context_spiketimes) - 1:
                     p2 += 1
@@ -895,7 +956,7 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
                 input_spiketimes_hiact.append(input_spiketimes[p1])
                 p1 += 1
         else:
-            if input_spiketimes[p1] - context_spiketimes[p2] < -10:
+            if input_spiketimes[p1] - context_spiketimes[p2] < -window:
                 # context spike in front of input spike and distance > 10ms
                 input_spiketimes_lowact.append(input_spiketimes[p1])
                 p1 += 1
@@ -903,16 +964,74 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units, stim
                 input_spiketimes_hiact.append(input_spiketimes[p1])
                 p1 += 1
     assert( len(input_spiketimes_hiact) + len(input_spiketimes_lowact) == len(input_spiketimes))
-    ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
-    taxis = (edges[:-1] + edges[1:]) / 2
-    pair['ccg_hiact'] = ccg
-    pair['nspk_hiact'] = nspk
-    pair['efficacy_hiact'] = get_efficacy(ccg, nspk, taxis)
-    ccg, edges, nspk = get_ccg(input_spiketimes_lowact, target_spiketimes)
-    pair['efficacy_lowact'] = get_efficacy(ccg, nspk, taxis)
+    return  input_spiketimes_hiact, input_spiketimes_lowact
+
+
+def batch_test_effiacay_coincident_spk(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+        stim='spon', window=10):
+    s = stim.split('_')[0]
+    pair_file = os.path.join(summary_folder, f'ne-pairs-act-level-{stim}-{window}ms.json')
+    pairs = pd.read_json(pair_file)
+    exp_loaded = None
+    pairs_included = []
+    for i in range(len(pairs)):
+        print('{} / {}'.format(i + 1, len(pairs)))
+        pair = pairs.iloc[i].copy(deep=True)
+        n_events = int(np.ceil(0.99 * min(pair.nspk_hiact, pair[f'nspk_ne_{stim}'])))
+        exp = pair.exp
+        exp = str(exp)
+        exp = exp[:6] + '_' + exp[6:] 
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp_loaded = exp
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-20dft-{s}.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+        cne = pair.cne
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_unit = ne.member_ne_spikes[cne][member_idx]
+        ne_spiketimes = ne_unit.spiketimes
+            
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        input_units_tmp = input_units[:pair.input_idx] + input_units[pair.input_idx+1:]
+        pair = test_effiacay_coincident_spk(pair, input_unit, target_unit, input_units_tmp, ne_spiketimes,
+                                            n_events, stim=stim, window=window)
+        pairs_included.append(pair)
+    pairs_included = pd.DataFrame(pairs_included)
+    pairs_included.reset_index(inplace=True, drop=True)
+    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-act-level-{stim}-{window}ms-zscore.json'))
+
+
+def test_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, ne_spiketimes, n_events, 
+                                 stim, window, nreps=1000):
+    
+    # get efficacy distribution of sub sampled spikes
+    input_spiketimes_hiact, _ = get_hiact_spikes(input_unit, context_units,stim=stim, window=window)
+    s = stim.split("_")[0]
+    target_spiketimes = eval(f'target_unit.spiketimes_{s}')
+    efficacy_hiact_subsample = np.zeros(nreps)
+    for i in range(nreps):
+        input_spiketimes_tmp = np.random.choice(input_spiketimes_hiact, n_events, replace=False)
+        ccg, edges, _ = get_ccg(input_spiketimes_tmp, target_spiketimes)
+        taxis = (edges[:-1] + edges[1:]) / 2
+        efficacy_hiact_subsample[i] = get_efficacy(ccg, n_events, taxis)
+    pair['efficacy_hiact_subsample'] = efficacy_hiact_subsample
+    
+    # get efficacy of subsampled ne spikes
+    efficacy_ne_subsample = np.zeros(nreps)
+    for i in range(nreps):
+        input_spiketimes_tmp = np.random.choice(ne_spiketimes, n_events, replace=False)
+        ccg, edges, _ = get_ccg(input_spiketimes_tmp, target_spiketimes)
+        taxis = (edges[:-1] + edges[1:]) / 2
+        efficacy_ne_subsample[i] = get_efficacy(ccg, n_events, taxis)
+    pair['efficacy_ne_subsample'] = efficacy_ne_subsample
+    pair['efficacy_ne_hiact_z'] = (pair['efficacy_ne_subsample'].mean() -  pair['efficacy_hiact_subsample'].mean()) / \
+                                    np.sqrt(pair['efficacy_ne_subsample'].std() ** 2 + pair['efficacy_hiact_subsample'].std() ** 2)
     return pair
-
-
+            
 def batch_get_effiacay_pairwise_spk(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',

@@ -55,6 +55,8 @@ tpd_color = (colors[5], colors[1], colors[0], colors[4])
 A1_color = (colors[1], colors[0])
 MGB_color = (colors[5], colors[4])
 colors_split = [colors[i] for i in [7, 6, 3, 2, 9, 8]]
+colors = sns.color_palette("colorblind")
+ne_hiact_color = [colors[i] for i in [2, 6]]
 fontsize_figure_axes_label = 8
 fontsize_figure_tick_label = 7
 fontsize_panel_label = 12
@@ -1123,7 +1125,7 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     
     fig = plt.figure(figsize=[figure_size[2][0], figure_size[2][0]])
     x_fig = .35
-    y_fig = .35
+    y_fig = .3
     # panel A: BS/NS neurons
     print('A')
     y_start = .6
@@ -1142,17 +1144,13 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     # panel C: NE vs nonNE spike efficacy
     print('C')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax, change='increase')
-    print('D')
-    x_start = .6
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax, change='decrease')
+    plot_efficacy_ne_vs_nonne(ax)
     
     fig.savefig(os.path.join(figfolder, 'fig5.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig5.pdf'), dpi=300)
+    #fig.savefig(os.path.join(figfolder, 'fig5.pdf'), dpi=300)
     
    
-def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon', change='increase'):
+def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon', change=None):
     pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-perm-test-{stim}.json'))
     if 'ss' not in stim:
         pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
@@ -1161,11 +1159,12 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
     ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='grey', edgecolor='w')
     if change == 'increase':
         pairs = pairs[pairs[f'efficacy_ne_{stim}'] > pairs[f'efficacy_nonne_{stim}']]
-    else:
-        pairs = pairs[pairs[f'efficacy_ne_{stim}'] > pairs[f'efficacy_nonne_{stim}']]
-    pairs_sig = pairs[(pairs.efficacy_diff_p < .05) & (pairs['waveform_ns'])]
+    elif change == 'decrease':
+        pairs = pairs[pairs[f'efficacy_ne_{stim}'] < pairs[f'efficacy_nonne_{stim}']]
+    p_thresh = .05 #/ len(pairs)
+    pairs_sig = pairs[(pairs.efficacy_diff_p < p_thresh) & (pairs['waveform_ns'])]
     ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[1], edgecolor='w')
-    pairs_sig = pairs[(pairs.efficacy_diff_p < .05) & (~pairs['waveform_ns'])]
+    pairs_sig = pairs[(pairs.efficacy_diff_p < p_thresh) & (~pairs['waveform_ns'])]
     ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[0], edgecolor='w')
     
     ax.plot([0, 30], [0, 30], 'k')
@@ -1178,6 +1177,8 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
 
     _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
     print('p =', p)
+    print('non-sig: ', sum(pairs.efficacy_diff_p > p_thresh))
+    print('non-sig: ', sum(pairs.efficacy_diff_p < p_thresh))
     if p > .001:
         ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
     else:
@@ -1227,9 +1228,11 @@ def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\conn
     ax.set_xlabel('A1 neuron type')
     ax.set_ylabel('Efficacy gain (%)')
     
-    _, p = stats.mannwhitneyu(pairs[pairs.waveform_ns][f'efficacy_gain'], 
-                              pairs[~pairs.waveform_ns][f'efficacy_gain'])
+    _, p = stats.mannwhitneyu(pairs[pairs.waveform_ns]['efficacy_gain'], 
+                              pairs[~pairs.waveform_ns]['efficacy_gain'])
     print('p =', p)
+    print('NS: ', pairs['waveform_ns'].sum())
+    print('BS: ', len(pairs) - pairs['waveform_ns'].sum())
     plot_significance_star(ax, p, [0, 1], 15, 16)
     ax.plot([-.5, 1.5], [0, 0], 'k--')
     ax.set_ylim([-10, 15])
@@ -1239,32 +1242,176 @@ def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\conn
 
 def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
-    fig = plt.figure(figsize=[figure_size[2][0], 4*cm])
+    
+    fig = plt.figure(figsize=[figure_size[2][0], 6.5 * cm])
+
+    print('A')
+    example_file = os.path.join(r'E:\Congcong\Documents\data\connection\data-pkl',
+        '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon_ss.json')
+    nepairs = pd.read_json(example_file)
+    nepairs = nepairs[(nepairs.cne == 2) & (nepairs.target_idx == 3)]
+    # add axes for ccg plot
     x_start = .1
-    y_start = .2
-    x_fig = .3
-    y_fig = .6
+    y_start = .12
+    x_fig = .2
+    x_space = .05
+    y_fig = .22
+    y_space =  .07
+    axes = add_multiple_axes(fig, 3, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
+    plot_ne_neuron_pairs_connection_ccg(axes, nepairs, stim='spon_ss')
+    axes = axes.flatten()
+    for ax in axes:
+        ax.set_ylim([0, 200])
+        ax.set_yticks(range(0, 201, 50))
+        ax.set_yticklabels([0, '', 100, '', 200])
+        ax.tick_params(axis='x', labelsize=6.5)
+        ax.tick_params(axis='y', labelsize=6.5)
+        ax.xaxis.label.set_size(7)
+        ax.yaxis.label.set_size(7)
+    
+    x_start = .7
+    y_start = .62
+    x_fig = .25
+    y_fig = .3
     # panel C: NE vs nonNE spike efficacy
-    print('A-i')
+    print('B-i')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_efficacy_ne_vs_nonne(ax, stim='spon_ss')
     ax.set_xlim([0, 30])
     ax.set_ylim([0, 30])
-    ax.set_xticks(range(0, 31, 10))
-    ax.set_yticks(range(0, 31, 10))
+    ax.set_xticks(range(0, 31, 10), labelsize=6.5)
+    ax.set_yticks(range(0, 31, 10), labelsize=6.5)
+    ax.xaxis.label.set_size(7)
+    ax.yaxis.label.set_size(7)
 
     # panel D-i: BS/NS neurons
     print('B-ii')
-    x_start = .6
+    y_start = .12
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_efficacy_gain_cell_type(ax=ax, stim='spon_ss')
-    ax.set_ylim([-10, 30])
-    ax.set_yticks(range(-10,31,10))
-    fig.savefig(os.path.join(figfolder, 'fig4-A.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig4-A.pdf'), dpi=300)
+    ax.set_ylim([-20, 30])
+    ax.set_yticks(range(-20,31,10))
+    ax.tick_params(axis='x', labelsize=6.5)
+    ax.tick_params(axis='y', labelsize=6.5)
+    ax.xaxis.label.set_size(7)
+    ax.yaxis.label.set_size(7)
+    fig.savefig(os.path.join(figfolder, 'fig6.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig6.pdf'), dpi=300)
+
+
+def figure7():
+    pass
+
+
+def plot_delta_dfficacy_ne_vs_hiact(axes, datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+                                    stim='spon', coincidence='act-level', mode='raw', window=10, 
+                                    savepath=None, method='raw', sig=False):
+    # method raw, sig false: stress the difference between ne and hiact spikes efficacy
+    # method raw, sig True: show pairs with significant difference
+    # method subsample, sig True: show pairs with significant difference
+    # method subsample, sig True: show pairs with significant difference
+
+    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{coincidence}-{stim}-{window}ms-zscore.json'))
+    zscore_thresh = stats.norm.ppf(1 - 0.05 / len(pairs))
+    if method == 'raw':
+        pairs[f'efficacy_diff_ne_{stim}'] = pairs[f'efficacy_ne_{stim}'] - pairs[f'efficacy_neuron_{stim}'] 
+        pairs[f'efficacy_diff_hiact_{stim}'] = pairs[f'efficacy_hiact'] - pairs[f'efficacy_neuron_{stim}'] 
+    elif method == 'subsample':
+        pairs[f'efficacy_diff_ne_{stim}'] = pairs[f'efficacy_ne_subsample'].apply(np.mean) - pairs[f'efficacy_neuron_{stim}'] 
+        pairs[f'efficacy_diff_hiact_{stim}'] = pairs[f'efficacy_hiact_subsample'].apply(np.mean) - pairs[f'efficacy_neuron_{stim}'] 
+    pairs_posi_neg = [pairs[pairs[f'efficacy_diff_ne_{stim}'] > 0], pairs[pairs[f'efficacy_diff_ne_{stim}'] < 0]]
+
+    markersize = 10
+    if sig:
+        for idx_plot, pairs in enumerate(pairs_posi_neg):
+            pairs_sig = pairs[np.abs(pairs.efficacy_ne_hiact_z) > zscore_thresh]
+            pairs_nonsig =  pairs[np.abs(pairs.efficacy_ne_hiact_z) < zscore_thresh]
+            ax = axes[idx_plot]
+            # line plot
+            for i in range(len(pairs_sig)):
+                pair = pairs_sig.iloc[i]
+                c = tpd_color[1] if pair.target_waveform_tpd < .45 else tpd_color[0]
+                ax.plot([pair[f'efficacy_diff_ne_{stim}'], pair[f'efficacy_diff_hiact_{stim}']],
+                        [pair[f'efficacy_neuron_{stim}'], pair[f'efficacy_neuron_{stim}']], color=c)
+            for i in range(len(pairs_nonsig)):
+                pair = pairs_nonsig.iloc[i]
+                c = 'grey'
+                ax.plot([pair[f'efficacy_diff_ne_{stim}'], pair[f'efficacy_diff_hiact_{stim}']],
+                        [pair[f'efficacy_neuron_{stim}'], pair[f'efficacy_neuron_{stim}']], color=c)
     
     
-def plot_delta_dfficacy_ne_vs_hiact(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+            h1 = ax.scatter(pairs_nonsig[f'efficacy_diff_ne_{stim}'], 
+                       pairs_nonsig[f'efficacy_neuron_{stim}'], 
+                       c='grey', alpha=.8, s=markersize)
+            ax.scatter(pairs_sig[pairs_sig.target_waveform_tpd < .45][f'efficacy_diff_ne_{stim}'], 
+                       pairs_sig[pairs_sig.target_waveform_tpd < .45][f'efficacy_neuron_{stim}'],
+                       color=tpd_color[1], alpha=.8, s=markersize)
+            ax.scatter(pairs_sig[pairs_sig.target_waveform_tpd > .45][f'efficacy_diff_ne_{stim}'], 
+                       pairs_sig[pairs_sig.target_waveform_tpd > .45][f'efficacy_neuron_{stim}'], 
+                       color=tpd_color[0], alpha=.8, s=markersize)
+        
+        
+            h2 = ax.scatter(pairs_nonsig[f'efficacy_diff_hiact_{stim}'], 
+                       pairs_nonsig[f'efficacy_neuron_{stim}'], 
+                       color='grey', marker='s', alpha=.8, s=markersize)
+            ax.scatter(pairs_sig[pairs_sig.target_waveform_tpd < .45][f'efficacy_diff_hiact_{stim}'], 
+                       pairs_sig[pairs_sig.target_waveform_tpd < .45][f'efficacy_neuron_{stim}'],
+                       color=tpd_color[1], marker='s', alpha=.8, s=markersize)
+            ax.scatter(pairs_sig[pairs_sig.target_waveform_tpd > .45][f'efficacy_diff_hiact_{stim}'], 
+                       pairs_sig[pairs_sig.target_waveform_tpd > .45][f'efficacy_neuron_{stim}'], 
+                       color=tpd_color[0], marker='s', alpha=.8, s=markersize)
+            ax.plot([0, 0], [0, 20], 'k')
+            ax.set_xlim([-20, 20])
+            ax.set_ylim([0, 20])
+            if idx_plot == 1:
+                ax.set_xlabel('\u0394efficacy (%)')
+                ax.set_ylabel('Efficacy of all spikes (%)', labelpad=0)
+            else:
+                ax.set_xticklabels([])
+                ax.legend([h1, h2], ['NE spikes', 'coincident spikes'], bbox_to_anchor=(.5, 1.7), loc='upper center')
+    
+            _, p = stats.wilcoxon(pairs[f'efficacy_diff_ne_{stim}'], pairs[f'efficacy_diff_hiact_{stim}'])
+            print(stim, window, idx_plot, 'p =', p)
+            if p < .01:
+                ax.text(-18, 3, f'p = {p:.1e}', fontsize=6)
+            else:
+                ax.text(-18, 3, f'p = {p:.2f}', fontsize=6)
+
+        
+    else:
+        for idx_plot, pairs in enumerate(pairs_posi_neg):
+            ax = axes[idx_plot]
+            for i in range(len(pairs)):
+                pair = pairs.iloc[i]
+                ax.plot([pair[f'efficacy_diff_ne_{stim}'], pair[f'efficacy_diff_hiact_{stim}']],
+                    [pair[f'efficacy_neuron_{stim}'], pair[f'efficacy_neuron_{stim}']], color='grey')
+            
+            h1 = ax.scatter(pairs[f'efficacy_diff_ne_{stim}'], pairs[f'efficacy_neuron_{stim}'], 
+                   color=ne_hiact_color[0], s=markersize, alpha=.8)
+            h2 = ax.scatter(pairs[f'efficacy_diff_hiact_{stim}'], pairs[f'efficacy_neuron_{stim}'], 
+                   color=ne_hiact_color[1], marker='s', s=markersize, alpha=.8)
+            ax.plot([0, 0], [0, 20], 'k')
+            ax.set_xlim([-20, 20])
+            ax.set_ylim([0, 20])
+            if idx_plot == 1:
+                ax.set_xlabel('\u0394efficacy (%)')
+                ax.set_ylabel('Efficacy of all spikes (%)', labelpad=0)
+            else:
+                ax.set_xticklabels([])
+                ax.legend([h1, h2], ['NE spikes', 'coincident spikes'], bbox_to_anchor=(.5, 1.7), loc='upper center')
+    
+            _, p = stats.wilcoxon(pairs[f'efficacy_diff_ne_{stim}'], pairs[f'efficacy_diff_hiact_{stim}'])
+            print(stim, window, idx_plot, 'p =', p)
+            if p < .01:
+                ax.text(-18, 3, f'p = {p:.1e}', fontsize=6)
+            else:
+                ax.text(-18, 3, f'p = {p:.2f}', fontsize=6)
+    
+    if savepath:
+        plt.savefig(savepath, dpi=1000)
+        plt.close()
+    
+def plot_delta_dfficacy_ne_vs_hiact_hist(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
                                     stim='spon', coincidence='act-level', mode='diff'):
     pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{coincidence}-{stim}.json'))
     if mode == 'diff':
