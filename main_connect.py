@@ -43,6 +43,18 @@ for stim in ('spon', 'spon_ss', 'dmr', 'dmr_ss'):
     ct.batch_label_target_cell_type(stim=stim)
     ct.batch_inclusion(stim=stim)
     ct.combine_df(f'*pairs-ne-{stim}.json', f'ne-pairs-{stim}.json')
+    ct.batch_get_effiacay_change_significance(stim=stim)
+    ct. batch_get_effiacay_coincident_spk(stim=stim)
 
-# plot ccg og ne-A1 connection
+# plot ccg on ne-A1 connection
 cplot.batch_plot_ne_neuron_connection_ccg()
+
+# correlation of MGB neurons sharing A1 target
+ct.get_corr_common_target()
+ct.batch_get_effiacay_change_significance()
+
+for stim in ('spon', 'spon_ss'):
+    for window in (10, 5, 2):
+        ct.batch_get_effiacay_coincident_spk(stim=stim, window=window)
+        ct.batch_test_effiacay_coincident_spk(stim=stim, window=window)
+

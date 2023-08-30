@@ -1411,6 +1411,7 @@ def plot_delta_dfficacy_ne_vs_hiact(axes, datafolder=r'E:\Congcong\Documents\dat
         plt.savefig(savepath, dpi=1000)
         plt.close()
     
+    
 def plot_delta_dfficacy_ne_vs_hiact_hist(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
                                     stim='spon', coincidence='act-level', mode='diff'):
     pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{coincidence}-{stim}.json'))
