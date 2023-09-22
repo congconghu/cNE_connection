@@ -1169,4 +1169,38 @@ def batch_get_effiacay_pairwise_spk(
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
     pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-pairwise-{stim}.json'))
+
+
+def get_target_fr(
+        datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+       summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+       stim='spon'):
+    pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
+    pairs = pd.read_json(pair_file)
+    target_fr = []
+    target_nspk = []
+    exp_loaded = None
+    for i in range(len(pairs)):
+        print('{} / {}'.format(i + 1, len(pairs)))
+        pair = pairs.iloc[i]
+        exp = str(pair.exp)
+        exp = exp[:6] + '_' + exp[6:]
+       
+        if exp != exp_loaded:
+            spkfile = glob.glob(os.path.join(datafolder, f"{exp}-*-fs20000.pkl"))[0]
+            with open(spkfile, 'rb') as f:
+                session = pickle.load(f)
+        target = pair.target_idx
+        nspk = 0
+        dur  = 0
+        target_spktrain = eval(f'session.spktrain_{stim}')
+        for spktrain in target_spktrain:
+            nspk += np.sum(spktrain[target])
+            dur += len(spktrain[target]) / 2000
+        target_nspk.append(nspk)
+        target_fr.append(nspk / dur)
+    pairs["target_nspk"] = target_nspk
+    pairs["target_fr"] = target_fr
+    pairs.to_json(pair_file)
+    
     

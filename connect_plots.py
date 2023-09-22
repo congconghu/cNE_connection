@@ -22,6 +22,8 @@ from connect_toolbox import load_input_target_files
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import connect_toolbox as ct
 import pickle as pkl
+from sklearn.metrics import r2_score
+
 
 
 mpl.rcParams['font.size'] = 8
@@ -1154,8 +1156,39 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     
     fig.savefig(os.path.join(figfolder, 'fig3.jpg'), dpi=300)
     fig.savefig(os.path.join(figfolder, 'fig3.pdf'), dpi=300)
+
+
+def plot_efficacy_change_vs_target_fr(
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary', 
+        figfolder=r"E:\Congcong\Documents\data\connection\paper\figure",
+        stim="spon"):
+    pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
+    pairs = pd.read_json(pair_file)
+    pairs["ns"] = pairs.target_waveform_tpd < .45
+    pairs["efficacy_change"] = pairs.efficacy_ne_spon - pairs.efficacy_nonne_spon
     
-   
+    fig = plt.figure(figsize=[2,2])
+    ax = fig.add_axes([.16, .15, .8, .8])
+    ax.set_xlim([0, 20])
+    sns.regplot(data=pairs, x="target_fr", y="efficacy_change", color="k",
+                scatter=False, truncate=False)
+    sns.scatterplot(data=pairs, x="target_fr", y="efficacy_change", 
+                    hue="ns", hue_order=[True, False], palette=reversed(tpd_color[:2]),
+                    size=10, alpha=.8, axes=ax)
+    legend_handles, _ = ax.get_legend_handles_labels()
+    ax.legend(handles=legend_handles, labels=["NS", "BS"])
+    
+    ax.set_xlabel('A1 neuron FR (Hz)')
+    ax.set_ylabel('\u0394efficacy (%)')
+    ax.set_ylim([-10, 15])
+    a, b = np.polyfit(pairs.target_fr, pairs.efficacy_change, 1)
+    r2 = r2_score(pairs.efficacy_change, a * pairs.target_fr + b)
+    ax.text(13, -8, f"R2={r2:.1e}")
+    fig.savefig(os.path.join(figfolder, "fig3-sup.jpg"), dpi=300)
+    fig.savefig(os.path.join(figfolder, "fig3-sup.pdf"), dpi=300)
+
+
+
 def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
                               stim='spon', change=None, celltype=False, sig=False):
     pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}-subsampled.json'))
