@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from plot_box import plot_strf
 import ne_toolbox as netools
+import helper
 
 
 def load_input_target_files(datafolder, file_id):
@@ -417,12 +418,28 @@ def update_baseline(pairs, field_id):
     return pairs
 
 
-def batch_get_efficacy_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', stim='spon'):
+def batch_get_efficacy_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
+                              stim='spon', subsample=False):
     files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
     for file in files:
+        print(file)
         pairs = pd.read_json(file)
-        for unit_type in ('neuron', 'ne', 'nonne'):
-            pairs = update_efficacy(pairs, f'_{unit_type}_{stim}')
+        if not subsample:
+            for unit_type in ('neuron', 'ne', 'nonne'):
+                pairs = update_efficacy(pairs, f'_{unit_type}_{stim}')
+        else:
+            exp = re.search('\d{6}_\d{6}', file).group(0)
+            spkfiles, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*ne-20dft-spon.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                nedata = pickle.load(f)
+            if len(nedata.edges) == 2:
+                helper.batch_split_dmr_spon_spiketimes(spkfiles)
+                spkfiles, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+             
+                
+            pairs = batch_get_ne_nonne_efficacy_subsample(pairs, stim, input_units, target_units, nedata)
+    
         pairs.to_json(file)
 
 
@@ -434,6 +451,61 @@ def batch_get_efficacy(datafolder=r'E:\Congcong\Documents\data\connection\data-p
             pairs = update_efficacy(pairs, f'_{stim}')
         pairs.to_json(file)
 
+
+def batch_get_ne_nonne_efficacy_subsample(pairs, stim, input_units, target_units, nedata):
+    pairs_included = []
+    for i in range(len(pairs)):
+        pair = pairs.loc[i].copy()
+        cne = pair.cne
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        input_spiketimes = eval(f'input_unit.spiketimes_{stim}')
+        target_spiketimes = eval(f'target_unit.spiketimes_{stim}')
+        
+        member_idx = np.where(nedata.ne_members[cne] == pair.input_idx)[0][0]
+        ne_spiketimes = nedata.member_ne_spikes[cne][member_idx].spiketimes
+        nonne_spiketimes = np.array(list(set(input_spiketimes).difference(set(ne_spiketimes))))
+        assert(len(ne_spiketimes) + len(nonne_spiketimes) == len(input_spiketimes))
+        
+        ne_efficacy, nonne_efficacy = get_efficacy_subsample(
+            target_spiketimes, ne_spiketimes, nonne_spiketimes)
+        pair.update({f'efficacy_ne_{stim}': ne_efficacy, f'efficacy_nonne_{stim}': nonne_efficacy})
+        pairs_included.append(pair)
+    
+    pairs = pd.DataFrame(pairs_included)
+    pairs.reset_index(inplace=True, drop=True)
+    
+    return pairs
+
+
+def get_efficacy_subsample(target_spiketimes, input1_spiketimes, input2_spiketimes, nrepeat=100):
+    
+    efficacy_input2 = np.zeros(nrepeat)
+    
+    # input1 always have less spikes
+    nspk = min(len(input1_spiketimes), len(input2_spiketimes))
+    if len(input1_spiketimes) > len(input2_spiketimes):
+        input1_spiketimes, input2_spiketimes = input2_spiketimes, input1_spiketimes
+    
+    # get efficacy for input1:
+    ccg, edges, _ = get_ccg(input1_spiketimes, target_spiketimes)
+    taxis = (edges[1:] + edges[:-1]) / 2
+    efficacy_input1 = get_efficacy(ccg, nspk, taxis)
+    
+    input2_spiketimes = list(input2_spiketimes)
+    random.seed(0)
+    for i in range(nrepeat):
+        input2_spiketimes_tmp = random.sample(input2_spiketimes, nspk)
+        
+        ccg, edges, _ = get_ccg(input2_spiketimes_tmp, target_spiketimes)
+        efficacy_input2[i] = get_efficacy(ccg, nspk, taxis)
+    
+    if len(input1_spiketimes) > len(input2_spiketimes):
+       return np.median(efficacy_input2), efficacy_input1
+    else:
+       return efficacy_input1, np.median(efficacy_input2)
+    
+        
 
 def update_efficacy(pairs, field_id):
     efficacy = []
@@ -800,7 +872,7 @@ def batch_get_effiacay_change_significance_ne_nonne(
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
     pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json'))
-    
+
 
 def batch_get_effiacay_change_significance(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',

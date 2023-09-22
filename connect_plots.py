@@ -126,8 +126,8 @@ def plot_ccg(ax, ccg, baseline, thresh=None, taxis=None, nspk=None, causal_metho
         
     # plot baseline and threshold
     try:
-        ax.plot(taxis, baseline, 'b')
-        ax.plot(taxis, thresh, 'b--')
+        ax.plot(taxis, baseline, 'b', linewidth=.6)
+        ax.plot(taxis, thresh, 'b--', linewidth=.6)
     except ValueError:
         pass
     
@@ -625,6 +625,7 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
         im = plot_strf(axes[1], strf, taxis=unit.strf_taxis, faxis=unit.strf_faxis, flabels_arr = np.array([2, 8, 32]),
                        tlim=tlim, flim=flim, vmax=vmax, bf=unit.bf, latency=unit.latency)
         print(unit.bf/1000)
+        print(unit.latency)
         # add colorbar for strf
         axins = inset_axes(
             axes[1],
@@ -698,7 +699,7 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     batch_plot_fr(ax)
     #fig.savefig(os.path.join(figfolder, 'fig1.jpg'), dpi=300)
-    #fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
 
     
 def batch_hist_efficacy(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary',
@@ -768,8 +769,10 @@ def batch_plot_fr(ax, datafolder='E:\Congcong\Documents\data\connection\data-sum
         ax.hist([diff], bins=np.arange(-10, 11, 1), 
                 histtype='step', density=True, linewidth=.8, color=color[i])
         ax.scatter(np.mean(diff), .36, s=8, marker='v', facecolors='none', edgecolors=color[i])
+        ax.scatter(np.median(diff), .36, s=8, marker='v', facecolors=color[i], edgecolors=color[i])
         _, p = stats.wilcoxon(diff)
         print('p =', p)
+        print('median = ', np.median(diff))
         print('mean = ', np.mean(diff))
         print('std = ', np.std(diff))
    
@@ -911,8 +914,8 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
     y_start = .1
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_prob_share_target(ax=ax)
-    fig.savefig(os.path.join(figfolder, 'fig2.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig2.pdf'), dpi=300)
+    #fig.savefig(os.path.join(figfolder, 'fig2.jpg'), dpi=300)
+    #fig.savefig(os.path.join(figfolder, 'fig2.pdf'), dpi=300)
 
 
 def plot_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
@@ -934,7 +937,7 @@ def plot_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\d
         m.plot.bar(edgecolor=['k', 'grey'], ax=ax, facecolor='w', linewidth=2)
         ebar_colors=['k', 'grey']
         for i in range(0, len(corr), 2):
-            ax.plot([1, 0], corr.iloc[i: i+2]['corr'], 'k', linewidth=.6)
+            ax.plot([1, 0], np.array(corr.iloc[i: i+2]['corr']), 'k', linewidth=.6)
         for c in range(2):
             ax.errorbar(x=c, y=m.iloc[c], yerr=sd.iloc[c], fmt='None', color=ebar_colors[c], 
                         capsize=5, linewidth=1, zorder=1)
@@ -1010,7 +1013,7 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
     m.plot.bar(edgecolor=['k', 'grey'], ax=ax, facecolor='w', linewidth=2)
     ebar_colors=['k', 'grey']
     for i in range(0, len(prob_share), 2):
-        ax.plot([1, 0], prob_share.iloc[i: i+2]['share_target'], 'k', linewidth=.6)
+        ax.plot([1, 0], np.array(prob_share.iloc[i: i+2]['share_target']), 'k', linewidth=.6)
     for c in range(2):
         ax.errorbar(x=c, y=m.iloc[c], yerr=np.array([[0], [sd.iloc[c]]]), fmt='None', color=ebar_colors[c], 
                     capsize=5, linewidth=1, zorder=1)
@@ -1033,7 +1036,7 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
         plt.close()
 
 
-def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
     
     example_file = os.path.join(
@@ -1075,7 +1078,7 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plt.close()
 
 
-def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
     example_file = os.path.join(
         datafolder, '220825_005353-site6-5500um-25db-dmr-61min-H31x64-fs20000-pairs-ne-spon.json')
@@ -1120,7 +1123,7 @@ def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plt.close()
 
 
-def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
     
     fig = plt.figure(figsize=[figure_size[2][0], figure_size[2][0]])
@@ -1145,44 +1148,73 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     print('C')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_efficacy_ne_vs_nonne(ax)
+    x_start = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_efficacy_ne_vs_nonne(ax, celltype=(True))
     
-    fig.savefig(os.path.join(figfolder, 'fig5.jpg'), dpi=300)
-    #fig.savefig(os.path.join(figfolder, 'fig5.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3.pdf'), dpi=300)
     
    
-def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', stim='spon', change=None):
-    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-perm-test-{stim}.json'))
+def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
+                              stim='spon', change=None, celltype=False, sig=False):
+    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}-subsampled.json'))
+    pairs = pairs[pairs[f'inclusion_{stim}']]
+    pairs = pairs[(pairs[f'efficacy_ne_{stim}'] > 0) & (pairs[f'efficacy_nonne_{stim}'] > 0)]
     if 'ss' not in stim:
         pairs = pairs[pairs[f'efficacy_ne_{stim}'] > 0]
         pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
     pairs['waveform_ns'] = pairs.target_waveform_tpd < .45
-    ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='grey', edgecolor='w')
+    
+    if celltype:
+        # color-code cell types
+        for i in reversed(range(2)):
+            if i == 0:
+                pairs_tmp = pairs.query("waveform_ns == False")
+            else:
+                pairs_tmp = pairs.query("waveform_ns == True")
+                             
+            ax.scatter(pairs_tmp[f'efficacy_nonne_{stim}'], 
+                       pairs_tmp[f'efficacy_ne_{stim}'], 
+                       s=15,  color=tpd_color[i], edgecolor='w', alpha=.5)
+            _, p = stats.wilcoxon(pairs_tmp[f'efficacy_ne_{stim}'], pairs_tmp[f'efficacy_nonne_{stim}'])
+            print('p =', p)
+            if p > .001:
+                ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
+            else:
+                ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
+    else:
+        ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='grey', edgecolor='w')
+        _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
+        print('p =', p)
+        if p > .001:
+            ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
+        else:
+            ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
+    
     if change == 'increase':
         pairs = pairs[pairs[f'efficacy_ne_{stim}'] > pairs[f'efficacy_nonne_{stim}']]
     elif change == 'decrease':
         pairs = pairs[pairs[f'efficacy_ne_{stim}'] < pairs[f'efficacy_nonne_{stim}']]
-    p_thresh = .05 #/ len(pairs)
-    pairs_sig = pairs[(pairs.efficacy_diff_p < p_thresh) & (pairs['waveform_ns'])]
-    ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[1], edgecolor='w')
-    pairs_sig = pairs[(pairs.efficacy_diff_p < p_thresh) & (~pairs['waveform_ns'])]
-    ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[0], edgecolor='w')
+    
+    
+    if sig:
+        # plot data points with significance
+        p_thresh = .05 #/ len(pairs)
+        pairs_sig = pairs[(pairs.efficacy_diff_p < p_thresh) & (pairs['waveform_ns'])]
+        ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[1], edgecolor='w')
+        pairs_sig = pairs[(pairs.efficacy_diff_p < p_thresh) & (~pairs['waveform_ns'])]
+        ax.scatter(pairs_sig[f'efficacy_nonne_{stim}'], pairs_sig[f'efficacy_ne_{stim}'], s=15, color=tpd_color[0], edgecolor='w')
+        print('non-sig: ', sum(pairs.efficacy_diff_p > p_thresh))
+        print('sig: ', sum(pairs.efficacy_diff_p < p_thresh))
     
     ax.plot([0, 30], [0, 30], 'k')
     ax.set_xlim([0, 30])
     ax.set_ylim([0, 30])
     ax.set_xticks(range(0, 31, 10))
     ax.set_yticks(range(0, 31, 10))
-    ax.set_xlabel('nonNE spike efficacy (%)')
-    ax.set_ylabel('NE spike efficacy (%)')
-
-    _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
-    print('p =', p)
-    print('non-sig: ', sum(pairs.efficacy_diff_p > p_thresh))
-    print('non-sig: ', sum(pairs.efficacy_diff_p < p_thresh))
-    if p > .001:
-        ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
-    else:
-        ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
+    ax.set_xlabel('non-cNE spike efficacy (%)')
+    ax.set_ylabel('cNE spike efficacy (%)')
 
     
     
@@ -1218,8 +1250,10 @@ def plot_waveform_ptd(datafolder='E:\Congcong\Documents\data\connection\data-pkl
 
 
 def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
-    file = glob.glob(os.path.join(datafolder, f'ne-pairs-perm-test-{stim}.json'))[0]
+    file = glob.glob(os.path.join(datafolder, f'ne-pairs-{stim}-subsampled.json'))[0]
     pairs = pd.read_json(file)
+    pairs = pairs[pairs[f'inclusion_{stim}']]
+    pairs = pairs[(pairs[f'efficacy_ne_{stim}'] > 0) & (pairs[f'efficacy_nonne_{stim}'] > 0)]
     pairs['waveform_ns'] = pairs.target_waveform_tpd < .45
     pairs['efficacy_gain'] = (pairs[f'efficacy_ne_{stim}'] - pairs[f'efficacy_nonne_{stim}'])
     boxplot_scatter(ax, x='waveform_ns', y='efficacy_gain', data=pairs, size=3, jitter=.3,
@@ -1276,7 +1310,7 @@ def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
     # panel C: NE vs nonNE spike efficacy
     print('B-i')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax, stim='spon_ss')
+    plot_efficacy_ne_vs_nonne(ax, stim='spon_ss',  celltype=True)
     ax.set_xlim([0, 30])
     ax.set_ylim([0, 30])
     ax.set_xticks(range(0, 31, 10), labelsize=6.5)
