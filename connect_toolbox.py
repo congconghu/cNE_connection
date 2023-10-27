@@ -324,11 +324,6 @@ def batch_get_ne_pair_ccg(datafolder=r'E:\Congcong\Documents\data\connection\dat
         
 def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'):
     
-    # load piars
-    pairs = pd.read_json(pairfile)
-    pairs = pairs[pairs.sig_spon]
-    if len(pairs) < 1:
-        return None
     # load single units
     exp = re.search('\d{6}_\d{6}', pairfile).group(0)
     _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
@@ -339,25 +334,53 @@ def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\da
         ne = pickle.load(f)
     
     nepairs = None
-    connected_input = pairs.input_idx.unique()
-    for cne, members in ne.ne_members.items():
-        ne_connection = [x in connected_input for x in members] # member neurons with A1 target
-        if any(ne_connection):
-            ne_inputs = members[ne_connection]
-            ne_targets = pairs.loc[pairs['input_idx'].isin(ne_inputs), 'target_idx'].unique()
-            for target in ne_targets:
-                target_unit = target_units[target]
-                for member_idx, member in enumerate(members):
-                    input_unit = input_units[member]
-                    ne_unit = ne.member_ne_spikes[cne][member_idx]
-                    new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim)
-                    new_pair.update({'target_unit': target_unit.unit, 'target_idx': target, 
-                                     'input_unit':input_unit.unit, 'input_idx': member,
-                                    'cne': cne})
-                    if nepairs is None:
-                        nepairs = pd.DataFrame(new_pair)
-                    else:
-                        nepairs = pd.concat([nepairs, pd.DataFrame(new_pair)], ignore_index=True)
+    if 'ss' in stim:
+        pairs = pd.read_json(re.sub('pairs', f'pairs-ne-{s}', pairfile))
+        if len(pairs) < 1:
+            return None
+        for i in range(len(pairs)):
+            print(i + 1, len(pairs), sep='/')
+            pair = pairs.iloc[i]
+            cne, input_idx, target_idx = pair.cne, pair.input_idx, pair.target_idx
+            input_unit = input_units[input_idx]
+            target_unit = target_units[target_idx]
+            member_idx = np.where(ne.ne_members[cne] == input_idx)[0][0]
+            ne_unit = ne.member_ne_spikes[cne][member_idx]
+            new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim)
+            new_pair.update({'target_unit': target_unit.unit, 'target_idx': target_idx, 
+                             'input_unit':input_unit.unit, 'input_idx': input_idx,
+                             'cne': cne})
+            if nepairs is None:
+                nepairs = pd.DataFrame(new_pair)
+            else:
+                nepairs = pd.concat([nepairs, pd.DataFrame(new_pair)], ignore_index=True)
+        nepairs[f'inclusion_{stim}'] = pairs[f'inclusion_{s}']
+        nepairs['target_waveform_tpd'] = pairs['target_waveform_tpd']
+    else:
+        # load piars
+        pairs = pd.read_json(pairfile)
+        pairs = pairs[pairs.sig_spon]
+        if len(pairs) < 1:
+            return 
+        connected_input = pairs.input_idx.unique()
+        for cne, members in ne.ne_members.items():
+            ne_connection = [x in connected_input for x in members] # member neurons with A1 target
+            if any(ne_connection):
+                ne_inputs = members[ne_connection]
+                ne_targets = pairs.loc[pairs['input_idx'].isin(ne_inputs), 'target_idx'].unique()
+                for target in ne_targets:
+                    target_unit = target_units[target]
+                    for member_idx, member in enumerate(members):
+                        input_unit = input_units[member]
+                        ne_unit = ne.member_ne_spikes[cne][member_idx]
+                        new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim)
+                        new_pair.update({'target_unit': target_unit.unit, 'target_idx': target, 
+                                         'input_unit':input_unit.unit, 'input_idx': member,
+                                        'cne': cne})
+                        if nepairs is None:
+                            nepairs = pd.DataFrame(new_pair)
+                        else:
+                            nepairs = pd.concat([nepairs, pd.DataFrame(new_pair)], ignore_index=True)
     return nepairs
     
 
@@ -419,7 +442,7 @@ def update_baseline(pairs, field_id):
 
 
 def batch_get_efficacy_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
-                              stim='spon', subsample=False):
+                              stim='spon', subsample=False, ss=False):
     files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
     for file in files:
         print(file)
@@ -455,6 +478,7 @@ def batch_get_efficacy(datafolder=r'E:\Congcong\Documents\data\connection\data-p
 def batch_get_ne_nonne_efficacy_subsample(pairs, stim, input_units, target_units, nedata):
     pairs_included = []
     for i in range(len(pairs)):
+        print(i + 1, len(pairs), sep='/')
         pair = pairs.loc[i].copy()
         cne = pair.cne
         input_unit = input_units[pair.input_idx]
@@ -469,7 +493,8 @@ def batch_get_ne_nonne_efficacy_subsample(pairs, stim, input_units, target_units
         
         ne_efficacy, nonne_efficacy = get_efficacy_subsample(
             target_spiketimes, ne_spiketimes, nonne_spiketimes)
-        pair.update({f'efficacy_ne_{stim}': ne_efficacy, f'efficacy_nonne_{stim}': nonne_efficacy})
+        pair[f'efficacy_ne_{stim}_subsample'] = ne_efficacy
+        pair[f'efficacy_nonne_{stim}_subsample'] = nonne_efficacy
         pairs_included.append(pair)
     
     pairs = pd.DataFrame(pairs_included)
@@ -949,8 +974,12 @@ def batch_get_effiacay_coincident_spk(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
         stim='spon', window=10, coincidence='act-level'):
-    pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
+    pair_file = os.path.join(summary_folder, f'ne-pairs-{stim}.json')
+
     pairs = pd.read_json(pair_file)
+    pairs = pairs[pairs[f'inclusion_{stim}'] 
+                  & (pairs[f'efficacy_ne_{stim}'] > 0) 
+                  & (pairs[f'efficacy_nonne_{stim}'] > 0)]
     exp_loaded = None
     pairs_included = []
     s = stim.split('_')[0]
@@ -963,25 +992,32 @@ def batch_get_effiacay_coincident_spk(
         if exp != exp_loaded:
             _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
             exp_loaded = exp
-            if coincidence == 'pairwise':
-                nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-{s}.pkl'))[0]
-                with open(nefile, 'rb') as f:
-                    ne = pickle.load(f)
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-{s}.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+            
+            if coincidence == 'act-level':
+               ne_members = list(ne.ne_members.values())
+            elif coincidence == 'pairwise':
                 corr_mat = np.corrcoef(ne.spktrain)
                 np.fill_diagonal(corr_mat, 0)
         input_unit = input_units[pair.input_idx]
         target_unit = target_units[pair.target_idx]
-        
+        cne = pair.cne
         if coincidence == 'act-level':
-            input_units_tmp = input_units[:pair.input_idx] + input_units[pair.input_idx+1:]
+            cne_participated = [members for members in ne_members if pair.input_idx in members]
+            members = np.concatenate(cne_participated)
+            nonmembers = list(set(range(len(input_units))).difference(members))
+            context_input = [input_units[x] for x in nonmembers]
+            n_members =len(ne.ne_members[cne])
         elif coincidence == 'pairwise':
-            cne = pair.cne
             members = ne.ne_members[cne]
             context_idx = np.argmax(corr_mat[pair.input_idx][members])
-            input_units_tmp = [input_units[members[context_idx]]]
-            
-        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, input_units_tmp, 
-                                           stim=stim, window=window)
+            context_input = [input_units[members[context_idx]]]
+            n_members=None
+        
+        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, context_input, 
+                                           stim=stim, window=window, group_size=n_members)
         pairs_included.append(pair)
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
@@ -989,7 +1025,8 @@ def batch_get_effiacay_coincident_spk(
 
 
 def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, 
-                                stim='spon', window=10):
+                                stim='spon', window=10, group_size=None, maxrep=1000):
+    random.seed(0)
     s = stim.split("_")[0]
 
     # get input and target spike times
@@ -998,25 +1035,41 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units,
     if 'ss' in stim:
         isi = get_isi(input_spiketimes)
         input_spiketimes = input_spiketimes[isi > 20]
-    ccg, edges, nspk = get_ccg(input_spiketimes, target_spiketimes)
-        
-    input_spiketimes_hiact, input_spiketimes_lowact = \
-        get_hiact_spikes(input_unit, context_units, stim, window=window)
     
-    ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
-    taxis = (edges[:-1] + edges[1:]) / 2
-    pair['ccg_hiact'] = ccg
-    pair['nspk_hiact'] = nspk
-    pair['efficacy_hiact'] = get_efficacy(ccg, nspk, taxis)
-    if  input_spiketimes_lowact != []:
-        ccg, edges, nspk = get_ccg(input_spiketimes_lowact, target_spiketimes)
-        pair['ccg_lowact'] = ccg
-        pair['nspk_lowact'] = nspk
-        pair['efficacy_lowact'] = get_efficacy(ccg, nspk, taxis)
+    
+    if not group_size:
+        group_size = len(context_units) + 1
+        nrep = 1
+        combinations = [range(len(context_units))]
     else:
-        pair['ccg_lowact'] = None
-        pair['nspk_lowact'] = 0
-        pair['efficacy_lowact'] = None
+        combinations = itertools.combinations(range(len(context_units)), group_size - 1)
+        combinations = list(combinations)
+        if len(combinations) > maxrep:
+            nrep = maxrep
+            combinations = random.sample(combinations, nrep)
+        else:
+            nrep = len(combinations)
+    
+    efficacy_hiact = []
+    for combination in combinations:
+        context = [context_units[x] for x in combination]
+        input_spiketimes_hiact, input_spiketimes_lowact = \
+            get_hiact_spikes(input_unit, context, stim, window=window)
+        
+        ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
+        taxis = (edges[:-1] + edges[1:]) / 2
+        try:
+            efficacy = get_efficacy(ccg, nspk, taxis)
+            efficacy_hiact.append(efficacy)
+        except TypeError:
+            continue
+        
+    pair['ccg_hiact_example'] = ccg
+    pair['nspk_hiact_example'] = nspk
+    pair['efficacy_hiact_example'] = efficacy
+    pair['efficacy_hiact'] = efficacy_hiact
+    pair['efficacy_hiact_median'] = np.median(efficacy_hiact)
+    
     return pair
 
 
@@ -1203,4 +1256,53 @@ def get_target_fr(
     pairs["target_fr"] = target_fr
     pairs.to_json(pair_file)
     
+
+def get_cNE_size(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+       summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    cNE_size = []
+    pair_file = os.path.join(summary_folder, "ne-pairs-pairwise-spon-10ms.json")
+    pairs = pd.read_json(pair_file)
+    exp_loaded = None
+    for i in range(len(pairs)):
+        pair = pairs.loc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            exp_loaded = exp
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:]
+            nefile = glob.glob(os.path.join(datafolder, f"{exp}-*-fs20000-ne-20dft-spon.pkl"))[-1]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+        cne = pair.cne
+        cNE_size.append(ne.ne_members[cne].size)
+    pairs["cne_size"] = cNE_size
+    pairs.to_json(os.path.join(summary_folder, "ne-pairs-pairwise-spon-10ms.json"))
+
+
+def get_target_nspk(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+       summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pair_file = os.path.join(summary_folder, "pairs.json")
+    pairs = pd.read_json(pair_file)
+    nspk_target = []
+    nspk_causal = []
+    target_waveform_tpd = []
+    exp_loaded = None
+    for i in range(len(pairs)):
+        pair = pairs.loc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            exp_loaded = exp
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:]
+            _, _, target_units, _ = load_input_target_files(datafolder,exp)
+        target_unit = target_units[pair.target_idx]
+        nspk_target.append(target_unit.spiketimes_spon.size)
+        nspk_causal.append(round(pair.nspk_spon * pair.efficacy_spon / 100))
+        target_waveform_tpd.append(target_unit.waveform_tpd)
+    pairs["nspk_target_spon"] = nspk_target
+    pairs["nspk_causal_spon"] = nspk_causal
+    pairs["target_waveform_tpd"] =  target_waveform_tpd
+    pairs.to_json(pair_file)
+        
+        
     

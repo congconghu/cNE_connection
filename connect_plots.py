@@ -23,8 +23,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import connect_toolbox as ct
 import pickle as pkl
 from sklearn.metrics import r2_score
-
-
+from statsmodels.formula.api import ols 
+import statsmodels.api as sm 
 
 mpl.rcParams['font.size'] = 8
 mpl.rcParams['font.family'] = 'Arial'
@@ -279,18 +279,22 @@ def plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_
     assert(n_pairs > 1)
     
     bottom_space = .8
-    fig = plt.figure(figsize=[8.8*cm, 1.8*n_pairs*cm + bottom_space*cm])
+    fig = plt.figure(figsize=[8.8*cm, 1.5*n_pairs*cm + bottom_space*cm])
     # probe
-    x_start = .08
-    y_start = (1.8*(n_pairs-2) + bottom_space + .5)/ (1.8 * n_pairs + bottom_space)
-    x_fig = .05
-    y_fig = 3 / (1.8 * n_pairs + bottom_space)
+    x_start = .1
+    x_fig = .08
+    # y_start = (1.8*(n_pairs-2) + bottom_space + .5)/ (1.8 * n_pairs + bottom_space)
+    # y_fig = 3 / (1.8 * n_pairs + bottom_space)
+    y_start = .05
+    y_fig = .4
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     position_idx, position_order = plot_position_on_probe(ax, ne_neuron_pairs, input_units)
     
     # icweight
-    y_start = 1/ (1.8 * n_pairs + bottom_space)
-    y_fig = 2 / (1.8 * n_pairs + bottom_space)
+    #y_start = 1/ (1.8 * n_pairs + bottom_space)
+    #y_fig = 2 / (1.8 * n_pairs + bottom_space)
+    y_start = .55
+    y_fig = .4
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     weights = patterns[cne]
     weights = weights[position_order]
@@ -584,7 +588,7 @@ def batch_plot_strf_ccg_membership(datafolder=r'E:\Congcong\Documents\data\conne
     
 # ------------------------------------ figure plots ----------------------------------------------
 def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl', 
-            figfolder = r'E:\Congcong\Documents\data\connection\paper\figure',
+            figfolder = r'E:\Congcong\Documents\data\connection\paper\figure_v2',
             example='200820_230604-MGB_61-A1_260'):
     
     exp = re.search('\d{6}_\d{6}', example).group(0)
@@ -599,8 +603,34 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     target_unit = target_units[pair.target_idx.values[0]]
 
     
-    fig = plt.figure(figsize=[8.5*cm, 12*cm])
+    fig = plt.figure(figsize=[12*cm, 12*cm])
+    # plot distribution of efficacy
+    print("C")
+    x_start = .08
+    y_start = .1
+    x_fig = .2
+    y_fig = .15
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    batch_hist_efficacy(ax, stim='spon', color='k')
+    batch_hist_efficacy(ax, stim='dmr', color='grey')
+    ax.set_xlim([0, 20])
+    ax.set_ylim([0, 15])
+    ax.set_yticks(range(0, 16, 5))
     
+    # plot fr distribution
+    print('D')
+    x_start = .43
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    batch_plot_fr_pairs(ax)
+    
+    # plot best frequency
+    print("E")
+    x_start = .78
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    batch_scatter_bf(ax, stim='spon', marker='^')
+    batch_scatter_bf(ax, stim='dmr', facecolor='grey', edgecolor='w', marker='o', size=15)
+    fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
+
     # plot example STRFs
     x_start = [.45, .75]
     y_start = .8
@@ -676,30 +706,7 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     ax.set_xlabel('')
     ax.set_ylim([0, 50])
     
-    # plot distribution of efficacy
-    x_start = .08
-    y_start = .1
-    x_fig = .2
-    y_fig = .15
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    batch_hist_efficacy(ax, stim='spon', color='k')
-    batch_hist_efficacy(ax, stim='dmr', color='grey')
-    ax.set_xlim([0, 20])
-    ax.set_ylim([0, 15])
-    ax.set_yticks(range(0, 16, 5))
-    
-    
-    # plot best frequency
-    x_start = .43
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    batch_scatter_bf(ax, stim='spon', color='k')
-    batch_scatter_bf(ax, stim='dmr', color='grey')
-    
-    # plot fr distribution
-    x_start = .78
-    x_fig = .2
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    batch_plot_fr(ax)
+   
     #fig.savefig(os.path.join(figfolder, 'fig1.jpg'), dpi=300)
     fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
 
@@ -732,31 +739,34 @@ def batch_hist_efficacy(ax, datafolder='E:\Congcong\Documents\data\connection\da
 
 
 def batch_scatter_bf(ax, datafolder='E:\Congcong\Documents\data\connection\data-pkl',
-                           stim='spon', color='k'):
+                           stim='spon', facecolor=None, edgecolor='k', marker='x', size=8):
     files = glob.glob(os.path.join(datafolder, '*pairs.json'))
     bf_input = []
     bf_target = []
     for file in files:
         pairs = pd.read_json(file)
         pairs = pairs[pairs[f'sig_{stim}']]
+        if stim == 'spon':
+            pairs = pairs[~pairs['sig_dmr']]
         bf_input.extend(pairs.input_bf)
         bf_target.extend(pairs.target_bf)
     bf_input = np.log2(np.array(bf_input) / 500)
     bf_target = np.log2(np.array(bf_target) / 500)
     idx = (bf_input < 6) & (bf_target < 6)
     bf_input, bf_target = bf_input[idx], bf_target[idx]
-    ax.plot([0, 6], [0, 6], color='k')
+    ax.plot([0, 6], [0.5, 0.5], 'k--')
+    ax.plot([0, 6], [-0.5, -0.5],'k--')
+    ax.plot([0, 6], [0, 0], color='k')
 
-    ax.scatter(bf_input, bf_target, color=color, s=3)
+    ax.scatter(bf_input, bf_target-bf_input, edgecolor=edgecolor, s=size, marker=marker, facecolor=facecolor)
     ax.set_xticks(range(0, 7, 2))
-    ax.set_yticks(range(0, 7, 2))
     ax.set_xticklabels([.5, 2, 8, 32])
-    ax.set_yticklabels([.5, 2, 8, 32])
 
     ax.set_xlim([0, 6])
-    ax.set_ylim([0, 6])
+    ax.set_ylim([-2, 2])
+    ax.set_yticks(range(-2, 3))
     ax.set_xlabel('MGB neuron BF (kHz)')
-    ax.set_ylabel('A1 neuron BF (kHz)')
+    ax.set_ylabel('\u0394BF (oct)')
     print('n(ccg_{}) = {}'.format(stim, sum(idx)))
     
     
@@ -784,8 +794,33 @@ def batch_plot_fr(ax, datafolder='E:\Congcong\Documents\data\connection\data-sum
     ax.set_ylabel('Probability density')
     ax.set_xlabel('\u0394Firing rate')
 
+def batch_plot_fr_pairs(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary'):
+    data = pd.read_json(os.path.join(datafolder, 'pairs.json'))
+    fr_target = data[['exp', 'target_unit', 'target_fr_dmr', 'target_fr_spon']].drop_duplicates()
+    fr_input = data[['exp', 'input_unit', 'input_fr_dmr', 'input_fr_spon']].drop_duplicates()
+    sns.scatterplot(data=fr_input, x='input_fr_spon', y='input_fr_dmr', 
+                    alpha=.8, ax=ax, s=10, color=MGB_color[0])
+    sns.scatterplot(data=fr_target, x='target_fr_spon', y='target_fr_dmr', 
+                    alpha=.8, ax=ax, s=10, color=A1_color[0])
+    _, p = stats.wilcoxon(fr_input['input_fr_spon'], fr_input['input_fr_dmr'])
+    print('MGB: p=', p)
+    print('n=', len(fr_input))
+    _, p = stats.wilcoxon(fr_target['target_fr_spon'], fr_target['target_fr_dmr'])
+    print('A1: p=', p)
+    print('n=', len(fr_target))
+    plt.plot([.1, 100], [.1, 100])
+    ax.set_xlim([.1, 100])
+    ax.set_ylim([.1, 100])
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('Spon FR (Hz)')
+    ax.set_ylabel('Stim FR (Hz)')
+    ax.tick_params(axis="both", which="major", labelsize=6)
+       
+   
 
-def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
+
+def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
             datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             example_file1=r'200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000.pkl',
             example_idx1=[0, 15, 10],
@@ -793,7 +828,23 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
             example_idx2=[5, 6, 4]):
     
     fig = plt.figure(figsize=[11.6*cm, 12*cm])
-    
+    # summary plots
+    # plot corr of pairs of neurons sharing common target
+    x_start = .75
+    y_start = .7
+    x_fig = .23
+    y_fig = .2
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_corr_common_target(ax=ax)
+    # plot cNE member corr
+    y_start = .4
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_corr_ne_members(ax=ax)
+    # plot probability of cNE members sharing target
+    y_start = .1
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_prob_share_target(ax=ax)
+
     # PART1: correlation of MGB neuros sharing A1 targets
     # example CCG MGB neuronal pairs
     example_file = os.path.join(datafolder, example_file1)
@@ -899,25 +950,8 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
     ax.set_xlabel('Lag (ms)')
     ax.set_ylabel('Correlation')
     
-    
-    # summary plots
-    # plot corr of pairs of neurons sharing common target
-    x_start = .8
-    y_start = .7
-    x_fig = .19
-    y_fig = .2
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_corr_common_target(ax=ax)
-    # plot cNE member corr
-    y_start = .4
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_corr_ne_members(ax=ax)
-    # plot probability of cNE members sharing target
-    y_start = .1
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_prob_share_target(ax=ax)
     #fig.savefig(os.path.join(figfolder, 'fig2.jpg'), dpi=300)
-    #fig.savefig(os.path.join(figfolder, 'fig2.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig2.pdf'), dpi=300)
 
 
 def plot_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
@@ -927,36 +961,35 @@ def plot_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\d
     if ax is None:
         fig = plt.figure(figsize=[3, 3])
         ax = fig.add_axes([.2, .2, .7, .7])
+    pairs.drop_duplicates(subset=['exp', 'input1', 'input2'], inplace=True)
+    pairs['share_target'] = pairs.target > -1
+    colors=['black', 'grey']
     if group == 'exp':
-        pairs.drop_duplicates(subset=['exp', 'input1', 'input2'], inplace=True)
-        pairs['share_target'] = pairs.target > -1
-        corr = pairs.groupby(['exp', 'share_target'])['corr'].median()
+        corr = pairs.groupby(['exp', 'share_target'])['corr'].mean()
         corr = pd.DataFrame(corr).reset_index()
-        m = corr.groupby('share_target')['corr'].mean()
-        sd = corr.groupby('share_target')['corr'].std()
-        m = m.iloc[[1, 0]]
-        sd = sd.iloc[[1, 0]]
-        m.plot.bar(edgecolor=['k', 'grey'], ax=ax, facecolor='w', linewidth=2)
-        ebar_colors=['k', 'grey']
-        for i in range(0, len(corr), 2):
-            ax.plot([1, 0], np.array(corr.iloc[i: i+2]['corr']), 'k', linewidth=.6)
+        corr['n'] = pairs.groupby(['exp', 'share_target'])['corr'].size().values
+        corr['std'] = pairs.groupby(['exp', 'share_target'])['corr'].std().values
         for c in range(2):
-            ax.errorbar(x=c, y=m.iloc[c], yerr=sd.iloc[c], fmt='None', color=ebar_colors[c], 
-                        capsize=5, linewidth=1, zorder=1)
-            ax.scatter(c * np.ones(len(corr)//2), corr[corr.share_target == 1 - c]['corr'], 
-                       facecolor=ebar_colors[c], s=15, edgecolor='w', linewidth=.5)
-      
-        ax.set_ylabel('Median correlation')
-        
-        _, p = stats.wilcoxon(corr[corr.share_target]['corr'],
-                              corr[~corr.share_target]['corr'])
+            corr_tmp = corr[corr.share_target == 1 - c]
+            ax.scatter(c * np.ones(len(corr)//2), corr_tmp['corr'], s=corr_tmp['n']/(20 ** c)*5,
+                       facecolor=colors[c], edgecolor='w', linewidth=.5)
+            ax.errorbar(c * np.ones(len(corr_tmp)), y=corr_tmp['corr'], xerr=corr_tmp['std'] * 10, 
+                        fmt='None', color=colors[c], capsize=1, linewidth=1, zorder=1)
+            ax.scatter(x=[.7, 1, 1.3], y=np.array([.08]*3) + .015 * c, s=np.array([5, 10, 20])*5,
+                       facecolor=colors[c], edgecolor='w', linewidth=.5)
+        ax.errorbar(x=1, y=.06, xerr=.01 * 10, capsize=1, linewidth=1, zorder=1, color='k')
+        ax.set_ylim([0, .1])
+        ax.set_xlim([-.5, 1.5])
+        ax.set_ylabel('Mean correlation')
+        ax.set_yticks(np.arange(0, .11, .02))
         print('n(recording) = ', len(corr) / 2)
-        print('Wilcoxon: p =', p)
-        plot_significance_star(ax, p, [0, 1], .079, .08)
-        ax.set_ylim([0, .08])
+        model = ols('corr ~ C(share_target) + C(share_target):C(exp)', data=pairs).fit() 
+        result = sm.stats.anova_lm(model, type=1) 
+        print(result)
+        plot_significance_star(ax, result.loc['C(share_target)', 'PR(>F)'], [0, 1], .09, .091)
+        
 
     ax.set_xlabel('')
-    ax.set_xticklabels(['share common target', 'no common terget'], rotation=0)
     if savefolder is not None:
         fig.savefig(os.path.join(savefolder, 'pair_corr_share_target.jpg'), dpi=300)
         plt.close()
@@ -970,25 +1003,30 @@ def plot_corr_ne_members(datafolder=r'E:\Congcong\Documents\data\connection\data
         
     pairs = pd.read_json(os.path.join(datafolder,'member_nonmember_pair_xcorr.json'))
     pairs = pairs[pairs.stim == 'spon']
-    v = ax.violinplot([pairs[pairs.member]['corr']], points=100, positions=[0], 
-                       showextrema=False, widths=.8)
-    set_violin_half(v, half=None, color='k')
-    v = ax.violinplot([pairs[~pairs.member]['corr']], points=100, positions=[1], 
-                       showextrema=False, widths=.8)
-    set_violin_half(v, half=None, color='grey')
-    ax.set_ylabel('Pairwise correlation')
+    corr = pairs.groupby(['exp', 'member'])['corr'].mean()
+    corr = pd.DataFrame(corr).reset_index()
+    corr['n'] = pairs.groupby(['exp', 'member'])['corr'].size().values
+    corr['std'] = pairs.groupby(['exp', 'member'])['corr'].std().values
+    colors=['black', 'grey']
+    for c in range(2):
+        corr_tmp = corr[corr.member == 1 - c]
+        ax.scatter(c * np.ones(len(corr)//2), corr_tmp['corr'], s=corr_tmp['n']/(2**c),
+                   facecolor=colors[c], edgecolor='w', linewidth=.5)
+        ax.errorbar(c * np.ones(len(corr_tmp)), y=corr_tmp['corr'], xerr=corr_tmp['std'] * 10, 
+                    fmt='None', color='k', capsize=1, linewidth=1, zorder=1)
+        ax.scatter(x=[.7, 1, 1.3], y=np.array([.08]*3) + .015 * c, s=np.array([10, 50, 100]),
+                   facecolor=colors[c], edgecolor='w', linewidth=.5)
+    ax.errorbar(x=1, y=.06, xerr=.01 * 10, capsize=1, linewidth=1, zorder=1, color='k')
+    ax.set_ylim([0, .1])
+    ax.set_xlim([-.5, 1.5])
+    ax.set_ylabel('Mean correlation')
+    ax.set_yticks(np.arange(0, .11, .02))
+    print('n(recording) = ', len(corr) / 2)
+    model = ols('corr ~ C(member) + C(member):C(exp)', data=pairs).fit() 
+    result = sm.stats.anova_lm(model, type=1) 
+    print(result)
+    plot_significance_star(ax, result.loc['C(member)', 'PR(>F)'], [0, 1], .09, .091)
         
-    _, p = stats.mannwhitneyu(pairs[pairs.member]['corr'],
-                          pairs[~pairs.member]['corr'])
-    print(p)
-    plot_significance_star(ax, p, [0, 1], .28, .29)
-    ax.set_ylim([-.1, .3])
-    ax.set_yticks(np.arange(-.1, .31, .1))
-
-    ax.set_xlabel('')
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(['Within cNE\n(n={})'.format(sum(pairs.member)), 
-                        'Outside cNE\n(n={})'.format(len(pairs) - sum(pairs.member))])
     if savefolder is not None:
         fig.savefig(os.path.join(savefolder, 'pair_corr_ne_member.jpg'), dpi=300)
         plt.close()
@@ -1005,6 +1043,7 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
     pairs = pairs.groupby(['exp', 'within_ne']).filter(lambda x: x['within_ne'].count() > 3)
     prob_share =  pairs.groupby(['exp', 'within_ne'])['share_target'].mean()
     prob_share = pd.DataFrame(prob_share).reset_index()
+    prob_share['n'] = pairs.groupby(['exp', 'within_ne']).input1.size().values
     for exp in prob_share.exp.unique():
         if len(prob_share[prob_share.exp == exp]) < 2:
             prob_share = prob_share[prob_share.exp != exp]
@@ -1019,9 +1058,10 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
     for c in range(2):
         ax.errorbar(x=c, y=m.iloc[c], yerr=np.array([[0], [sd.iloc[c]]]), fmt='None', color=ebar_colors[c], 
                     capsize=5, linewidth=1, zorder=1)
-        ax.scatter(c * np.ones(len(prob_share)//2), prob_share[prob_share.within_ne == 1 - c]['share_target'], 
-                   facecolor=ebar_colors[c], s=15, edgecolor='w', linewidth=.5)
-  
+        prob_share_tmp = prob_share[prob_share.within_ne == 1 - c]
+        ax.scatter(c * np.ones(len(prob_share)//2), prob_share_tmp['share_target'], 
+                   facecolor=ebar_colors[c], s=prob_share_tmp['n']*2, edgecolor='w', linewidth=.5)
+    ax.scatter([.8, 1, 1.2], [.6, .6, .6], facecolor='k', s=np.array([5, 10, 20])*2, edgecolor='w', linewidth=.5)
     ax.set_ylabel('P(share A1 target)')
     
     _, p = stats.wilcoxon(prob_share[prob_share.within_ne == 1]['share_target'],
@@ -1125,13 +1165,14 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plt.close()
 
 
-def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
-            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
+def figure4_v2(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
+            subsample=False):
     
     fig = plt.figure(figsize=[figure_size[2][0], figure_size[2][0]])
     x_fig = .35
     y_fig = .3
-    # panel A: BS/NS neurons
+    # panel A: BS/NS neurons waveform ptd
     print('A')
     y_start = .6
     x_start = .1
@@ -1139,44 +1180,43 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plot_waveform_ptd(ax=ax)
     ax.set_ylabel('# of A1 neurons')
     print('B')
-    # panel B: BS/NS neurons
+    # panel B:NE vs nonNE spike efficacy
     x_start = .6
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_gain_cell_type(ax=ax)
+    plot_efficacy_ne_vs_nonne(ax, celltype=True, subsample=subsample)
+    # efficacy gain boxplot
+    # plot_efficacy_gain_cell_type(ax=ax, subsample=subsample)
     
     x_start = .1
     y_start = .1
-    # panel C: NE vs nonNE spike efficacy
+    # panel C: efficacy gain vs fr
     print('C')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax)
+    plot_efficacy_change_vs_target_fr(ax)
+    print('D')
     x_start = .6
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax, celltype=(True))
+    plot_contribution(ax)
     
-    fig.savefig(os.path.join(figfolder, 'fig3.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig4.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig4.pdf'), dpi=300)
 
 
-def plot_efficacy_change_vs_target_fr(
-        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary', 
-        figfolder=r"E:\Congcong\Documents\data\connection\paper\figure",
-        stim="spon"):
+def plot_efficacy_change_vs_target_fr(ax, stim="spon",
+        summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
     pair_file = os.path.join(summary_folder, f'ne-pairs-perm-test-{stim}.json')
     pairs = pd.read_json(pair_file)
     pairs["ns"] = pairs.target_waveform_tpd < .45
     pairs["efficacy_change"] = pairs.efficacy_ne_spon - pairs.efficacy_nonne_spon
     
-    fig = plt.figure(figsize=[2,2])
-    ax = fig.add_axes([.16, .15, .8, .8])
     ax.set_xlim([0, 20])
     sns.regplot(data=pairs, x="target_fr", y="efficacy_change", color="k",
                 scatter=False, truncate=False)
     sns.scatterplot(data=pairs, x="target_fr", y="efficacy_change", 
                     hue="ns", hue_order=[True, False], palette=reversed(tpd_color[:2]),
-                    size=10, alpha=.8, axes=ax)
-    legend_handles, _ = ax.get_legend_handles_labels()
-    ax.legend(handles=legend_handles, labels=["NS", "BS"])
+                    s=15, alpha=.8, axes=ax, legend=None)
+    #legend_handles, _ = ax.get_legend_handles_labels()
+    #ax.legend(handles=legend_handles, labels=["NS", "BS"])
     
     ax.set_xlabel('A1 neuron FR (Hz)')
     ax.set_ylabel('\u0394efficacy (%)')
@@ -1184,14 +1224,12 @@ def plot_efficacy_change_vs_target_fr(
     a, b = np.polyfit(pairs.target_fr, pairs.efficacy_change, 1)
     r2 = r2_score(pairs.efficacy_change, a * pairs.target_fr + b)
     ax.text(13, -8, f"R2={r2:.1e}")
-    fig.savefig(os.path.join(figfolder, "fig3-sup.jpg"), dpi=300)
-    fig.savefig(os.path.join(figfolder, "fig3-sup.pdf"), dpi=300)
-
 
 
 def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
-                              stim='spon', change=None, celltype=False, sig=False):
-    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}-subsampled.json'))
+                              stim='spon', change=None, celltype=False, sig=False, subsample=False):
+    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}.json'))
+   
     pairs = pairs[pairs[f'inclusion_{stim}']]
     pairs = pairs[(pairs[f'efficacy_ne_{stim}'] > 0) & (pairs[f'efficacy_nonne_{stim}'] > 0)]
     if 'ss' not in stim:
@@ -1199,6 +1237,10 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
         pairs = pairs[pairs[f'efficacy_nonne_{stim}'] > 0]
     pairs['waveform_ns'] = pairs.target_waveform_tpd < .45
     
+    if subsample:
+        pairs[f'efficacy_ne_{stim}'] = pairs[f'efficacy_ne_{stim}_subsample']
+        pairs[f'efficacy_nonne_{stim}'] = pairs[f'efficacy_nonne_{stim}_subsample']
+        
     if celltype:
         # color-code cell types
         for i in reversed(range(2)):
@@ -1209,7 +1251,7 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
                              
             ax.scatter(pairs_tmp[f'efficacy_nonne_{stim}'], 
                        pairs_tmp[f'efficacy_ne_{stim}'], 
-                       s=15,  color=tpd_color[i], edgecolor='w', alpha=.5)
+                       s=15,  color=tpd_color[i], edgecolor='w', alpha=.8)
             _, p = stats.wilcoxon(pairs_tmp[f'efficacy_ne_{stim}'], pairs_tmp[f'efficacy_nonne_{stim}'])
             print('p =', p)
             if p > .001:
@@ -1217,7 +1259,8 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
             else:
                 ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
     else:
-        ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], s=15, color='grey', edgecolor='w')
+        ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], 
+                   s=15, color='grey', edgecolor='w')
         _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
         print('p =', p)
         if p > .001:
@@ -1282,16 +1325,22 @@ def plot_waveform_ptd(datafolder='E:\Congcong\Documents\data\connection\data-pkl
         fig.savefig(os.path.join(savefolder, f'tpd-{region}.jpg'), bbox_inches='tight', dpi=300)
 
 
-def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary', stim='spon'):
-    file = glob.glob(os.path.join(datafolder, f'ne-pairs-{stim}-subsampled.json'))[0]
+def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary', 
+                                 stim='spon', subsample=False):
+    file = glob.glob(os.path.join(datafolder, f'ne-pairs-{stim}.json'))[0]
+
     pairs = pd.read_json(file)
     pairs = pairs[pairs[f'inclusion_{stim}']]
     pairs = pairs[(pairs[f'efficacy_ne_{stim}'] > 0) & (pairs[f'efficacy_nonne_{stim}'] > 0)]
     pairs['waveform_ns'] = pairs.target_waveform_tpd < .45
+    if subsample:
+        pairs[f'efficacy_ne_{stim}'] = pairs[f'efficacy_ne_{stim}_subsample']
+        pairs[f'efficacy_nonne_{stim}'] = pairs[f'efficacy_nonne_{stim}_subsample']
     pairs['efficacy_gain'] = (pairs[f'efficacy_ne_{stim}'] - pairs[f'efficacy_nonne_{stim}'])
     boxplot_scatter(ax, x='waveform_ns', y='efficacy_gain', data=pairs, size=3, jitter=.3,
-                    order=[False, True], hue='waveform_ns', palette=tpd_color[:2], hue_order=[False, True])
-    ax.set_xticklabels(['BS', 'NS'])
+                    order=[True, False], hue='waveform_ns', 
+                    palette=tpd_color[1::-1], hue_order=[True, False])
+    ax.set_xticklabels(['NS', 'BS'])
     ax.set_xlabel('A1 neuron type')
     ax.set_ylabel('Efficacy gain (%)')
     
@@ -1366,9 +1415,75 @@ def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
     fig.savefig(os.path.join(figfolder, 'fig6.pdf'), dpi=300)
 
 
-def figure7():
-    pass
+def figure7(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
+            coincidence="act-level"):
+    
+    file = r"ne-pairs-{}-spon-10ms.json".format(coincidence)
+    pairs = pd.read_json(os.path.join(datafolder, file))
+    
+    fig = plt.figure(figsize=[figure_size[2][0], 3.5 * cm])
 
+    print('A')
+    # add axes for ccg plot
+    x_start = .1
+    y_start = .18
+    x_fig = .35
+    y_fig = .8
+    
+    # panel B: NE vs coincident spike efficacy
+    print('A')
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    pairs["ns"] = list(map(int, pairs["target_waveform_tpd"] < .45))
+    for i in range(2):
+        pairs_tmp = pairs.query(f"ns == {i}")
+        try:
+            ax.scatter(pairs_tmp['efficacy_hiact_median'], 
+                       pairs_tmp['efficacy_ne_spon'], 
+                       s=pairs_tmp['cne_size'] * 2,  color=tpd_color[i], edgecolor='w', alpha=.8)
+        except KeyError:
+            ax.scatter(pairs_tmp['efficacy_hiact_median'], 
+                       pairs_tmp['efficacy_ne_spon'], 
+                       s=15,  color=tpd_color[i], edgecolor='w', alpha=.8)
+        _, p = stats.wilcoxon(pairs_tmp['efficacy_hiact_median'], pairs_tmp['efficacy_ne_spon'])
+        print('p =', p)
+        if p > .001:
+            ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
+        else:
+            ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
+    ax.plot([0, 30], [0, 30], 'k')
+    ax.set_xlim([0, 30])
+    ax.set_ylim([0, 30])
+    ax.set_xticks(range(0, 31, 10))
+    ax.set_yticks(range(0, 31, 10))
+    ax.set_xlabel('Coincident spike efficacy (%)')
+    ax.set_ylabel('cNE spike efficacy (%)')
+
+    # panel D-i: BS/NS neurons
+    print('B-ii')
+    x_start = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    pairs['efficacy_gain'] = (pairs['efficacy_ne_spon'] - pairs['efficacy_hiact_median'])
+    boxplot_scatter(ax, x='ns', y='efficacy_gain', data=pairs, size=3, jitter=.3,
+                    order=[1, 0], hue='ns', palette=tpd_color[1::-1], hue_order=[1, 0])
+    ax.set_xticklabels(['NS', 'BS'])
+    ax.set_xlabel('A1 neuron type')
+    ax.set_ylabel('Efficacy gain (%)')
+    
+    _, p = stats.mannwhitneyu(pairs[pairs.ns == 1]['efficacy_gain'], 
+                              pairs[pairs.ns == 0]['efficacy_gain'])
+    print('p =', p)
+    print('NS: ', pairs['ns'].sum())
+    print('BS: ', len(pairs) - pairs['ns'].sum())
+    plot_significance_star(ax, p, [0, 1], 15, 16)
+    ax.plot([-.5, 1.5], [0, 0], 'k--')
+    ax.set_ylim([-10, 15])
+    ax.set_yticks(range(-10, 16, 5))
+    ax.set_xlim([-.5, 1.5])
+    
+    fig.savefig(os.path.join(figfolder, f'fig7-{coincidence}.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, f'fig7-{coincidence}.pdf'), dpi=300)
+    
 
 def plot_delta_dfficacy_ne_vs_hiact(axes, datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
                                     stim='spon', coincidence='act-level', mode='raw', window=10, 
@@ -1521,4 +1636,57 @@ def plot_delta_dfficacy_ne_vs_hiact_hist(ax, datafolder=r'E:\Congcong\Documents\
     ax.set_xlabel('')
     ax.set_xticks([0, 1])
     ax.set_xticklabels(['NE spikes', 'coincident spikes'], rotation=0)
+
+
+def figure3_v2(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2'):
+    
+    # load nepiars
+    example_file = os.path.join(datafolder, '200821_015617-site6-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
+    nepairs = pd.read_json(example_file)
+    # load ne info
+    exp = re.search('\d{6}_\d{6}', example_file).group(0)
+    _, input_units, target_units, _ = load_input_target_files(datafolder, exp)
+    nefile = re.sub('-pairs-ne-spon.json', '-ne-20dft-spon.pkl', example_file)
+    with open(nefile, 'rb') as f:
+        ne = pkl.load(f)
+    patterns = ne.patterns
+    # plot example cen
+    cne = 3
+    target_idx = 32
+    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(
+        nepairs, cne, target_idx, input_units, target_units, patterns)
+    # adjust axes for ccg plot
+    axes = fig.get_axes()
+    axes[0].set_ylim([4600, 5800])
+    axes[0].invert_yaxis()
+    axes_ccg = axes[2:12]
+    for i, ax in enumerate(axes_ccg):
+        ax.set_ylim([0, 100])
+        ax.set_yticks(range(0, 101, 25))
+        if not i % 2:
+            ax.set_yticklabels([0, '', 50, '', 100])
+        else:
+            ax.set_yticklabels([])
+        
+    fig.savefig(os.path.join(figfolder, f'fig3.jpg'), dpi=300)
+    fig.savefig(os.path.join(figfolder, f'fig3.pdf'), dpi=300)
+
+
+def plot_contribution(ax, summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pair_file = os.path.join(summary_folder, "pairs.json")
+    pairs = pd.read_json(pair_file)
+   
+    pairs["contribution_spon"] = pairs.nspk_causal_spon / pairs.nspk_target_spon * 100
+    pairs["ns"] = pairs.target_waveform_tpd < .45
+    
+    boxplot_scatter(ax, x='ns', y='contribution_spon', data=pairs, size=3, jitter=.3,
+                   order=[True, False], hue='ns', 
+                   palette=tpd_color[1::-1], hue_order=[True, False])
+    
+    ax.set_xticklabels(['NS', 'BS'])
+    ax.set_xlabel('A1 cell type')
+    ax.set_ylabel('MGB neuron contribution (%)')
+    ax.set_ylim([0, 15])
+    _, p = stats.mannwhitneyu(pairs[pairs.ns]["contribution_spon"], pairs[pairs.ns == False]["contribution_spon"])
     
