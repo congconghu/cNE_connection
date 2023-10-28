@@ -603,13 +603,13 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     target_unit = target_units[pair.target_idx.values[0]]
 
     
-    fig = plt.figure(figsize=[12*cm, 12*cm])
+    fig = plt.figure(figsize=[11.6*cm, 8*cm])
     # plot distribution of efficacy
     print("C")
-    x_start = .08
-    y_start = .1
+    x_start = .77
+    y_start = .78
     x_fig = .2
-    y_fig = .15
+    y_fig = .2
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     batch_hist_efficacy(ax, stim='spon', color='k')
     batch_hist_efficacy(ax, stim='dmr', color='grey')
@@ -619,29 +619,57 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     
     # plot fr distribution
     print('D')
-    x_start = .43
+    y_start = .44
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     batch_plot_fr_pairs(ax)
     
     # plot best frequency
     print("E")
-    x_start = .78
+    y_start = .1
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     batch_scatter_bf(ax, stim='spon', marker='^')
     batch_scatter_bf(ax, stim='dmr', facecolor='grey', edgecolor='w', marker='o', size=15)
-    fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
+    
+    # plot ccg
+    x_start = .08
+    y_start = [.35, .1]
+    x_fig = .22
+    y_fig = .16
+    # spon
+    ax = fig.add_axes([x_start, y_start[0], x_fig, y_fig])
+    ccg = np.array(pair.ccg_spon.values[0])
+    baseline = np.array(pair.baseline_spon.values[0])
+    thresh = np.array(pair.thresh_spon.values[0])
+    plot_ccg(ax, ccg, baseline, thresh)
+    efficacy = pair.efficacy_spon.values[0]
+    ax.text(20, 40, f'efficacy = {efficacy:.2f}', fontsize=6, color='r')
+    ax.set_ylim([0, 100])
+    ax.set_xlabel('')
 
+    # stim
+    ax = fig.add_axes([x_start, y_start[1], x_fig, y_fig])
+    ccg = np.array(pair.ccg_dmr.values[0])
+    baseline = np.array(pair.baseline_dmr.values[0])
+    thresh = np.array(pair.thresh_dmr.values[0])
+    plot_ccg(ax, ccg, baseline, thresh)
+    efficacy = pair.efficacy_dmr.values[0]
+    ax.text(20, 20, f'efficacy = {efficacy:.2f}', fontsize=6, color='r')
+    ax.set_ylabel('')
+    
+    ax.set_ylim([0, 50])
+    
+    
     # plot example STRFs
-    x_start = [.45, .75]
-    y_start = .8
-    x_waveform = .07
-    y_waveform = .05
-    x_strf = .15
-    y_strf = .12
+    x_start = .45
+    y_start =  [.4, .1]
+    x_waveform = .04
+    y_waveform = .06
+    x_strf = .12
+    y_strf = .15
     
     for i, unit in enumerate((input_unit, target_unit)):
-        axes = [fig.add_axes([x_start[i] + .16, y_start + .08, x_waveform, y_waveform]), 
-                fig.add_axes([x_start[i], y_start, x_strf, y_strf])]
+        axes = [fig.add_axes([x_start + .12, y_start[i] + .1, x_waveform, y_waveform]), 
+                fig.add_axes([x_start, y_start[i], x_strf, y_strf])]
         # plot waveform
         idx = np.where(unit.adjacent_chan == unit.chan)[0][0]
         waveform_mean = unit.waveforms_mean[idx, :]
@@ -674,39 +702,11 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
         cb.ax.set_yticklabels(['', '', ''])
         axins.tick_params(axis='both', which='major', labelsize=6, pad=2)
         
-        if i == 1:
+        if i == 0:
             axes[1].set_ylabel('')
             axes[1].set_xlabel('')
             cb.ax.set_yticklabels(['-Max', '0', 'Max'])
-
-    # plot ccg
-    x_start = .1
-    y_start = .5
-    x_fig = .3
-    y_fig = .12
-    # spon
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    ccg = np.array(pair.ccg_spon.values[0])
-    baseline = np.array(pair.baseline_spon.values[0])
-    thresh = np.array(pair.thresh_spon.values[0])
-    plot_ccg(ax, ccg, baseline, thresh)
-    efficacy = pair.efficacy_spon.values[0]
-    ax.text(20, 40, f'efficacy = {efficacy:.2f}', fontsize=6, color='r')
-    ax.set_ylim([0, 100])
-
-    # stim
-    ax = fig.add_axes([.5, y_start, x_fig, y_fig])
-    ccg = np.array(pair.ccg_dmr.values[0])
-    baseline = np.array(pair.baseline_dmr.values[0])
-    thresh = np.array(pair.thresh_dmr.values[0])
-    plot_ccg(ax, ccg, baseline, thresh)
-    efficacy = pair.efficacy_dmr.values[0]
-    ax.text(20, 20, f'efficacy = {efficacy:.2f}', fontsize=6, color='r')
-    ax.set_ylabel('')
-    ax.set_xlabel('')
-    ax.set_ylim([0, 50])
     
-   
     #fig.savefig(os.path.join(figfolder, 'fig1.jpg'), dpi=300)
     fig.savefig(os.path.join(figfolder, 'fig1.pdf'), dpi=300)
 
