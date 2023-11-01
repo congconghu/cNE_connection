@@ -1086,7 +1086,7 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
         plt.close()
 
 
-def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
     
     example_file = os.path.join(
@@ -1127,9 +1127,9 @@ def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     fig.savefig(os.path.join(figfolder, 'fig3-2.pdf'), dpi=300)
     plt.close()
 
-
-def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
-            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
+def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2'):
+    
     example_file = os.path.join(
         datafolder, '220825_005353-site6-5500um-25db-dmr-61min-H31x64-fs20000-pairs-ne-spon.json')
     nepairs = pd.read_json(example_file)
@@ -1173,7 +1173,7 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plt.close()
 
 
-def figure4_v2(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
             subsample=False):
     
@@ -1368,135 +1368,6 @@ def plot_efficacy_gain_cell_type(ax, datafolder='E:\Congcong\Documents\data\conn
     ax.set_ylim([-10, 15])
     ax.set_yticks(range(-10, 16, 5))
     ax.set_xlim([-.5, 1.5])
-
-
-def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
-            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
-    
-    fig = plt.figure(figsize=[figure_size[2][0], 6.5 * cm])
-
-    print('A')
-    example_file = os.path.join(r'E:\Congcong\Documents\data\connection\data-pkl',
-        '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon_ss.json')
-    nepairs = pd.read_json(example_file)
-    nepairs = nepairs[(nepairs.cne == 2) & (nepairs.target_idx == 3)]
-    # add axes for ccg plot
-    x_start = .1
-    y_start = .12
-    x_fig = .2
-    x_space = .05
-    y_fig = .22
-    y_space =  .07
-    axes = add_multiple_axes(fig, 3, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
-    plot_ne_neuron_pairs_connection_ccg(axes, nepairs, stim='spon_ss')
-    axes = axes.flatten()
-    for ax in axes:
-        ax.set_ylim([0, 200])
-        ax.set_yticks(range(0, 201, 50))
-        ax.set_yticklabels([0, '', 100, '', 200])
-        ax.tick_params(axis='x', labelsize=6.5)
-        ax.tick_params(axis='y', labelsize=6.5)
-        ax.xaxis.label.set_size(7)
-        ax.yaxis.label.set_size(7)
-    
-    x_start = .7
-    y_start = .62
-    x_fig = .25
-    y_fig = .3
-    # panel C: NE vs nonNE spike efficacy
-    print('B-i')
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(axes[0], stim='spon',  celltype=True)
-    ax.set_xlim([0, 30])
-    ax.set_ylim([0, 30])
-    ax.set_xticks(range(0, 31, 10), labelsize=6.5)
-    ax.set_yticks(range(0, 31, 10), labelsize=6.5)
-    ax.xaxis.label.set_size(7)
-    ax.yaxis.label.set_size(7)
-
-    # panel D-i: BS/NS neurons
-    print('B-ii')
-    y_start = .12
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_gain_cell_type(ax=ax, stim='spon_ss')
-    ax.set_ylim([-20, 30])
-    ax.set_yticks(range(-20,31,10))
-    ax.tick_params(axis='x', labelsize=6.5)
-    ax.tick_params(axis='y', labelsize=6.5)
-    ax.xaxis.label.set_size(7)
-    ax.yaxis.label.set_size(7)
-    fig.savefig(os.path.join(figfolder, 'fig6.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig6.pdf'), dpi=300)
-
-
-def figure7(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
-            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure',
-            coincidence="act-level"):
-    
-    file = r"ne-pairs-{}-spon-10ms.json".format(coincidence)
-    pairs = pd.read_json(os.path.join(datafolder, file))
-    
-    fig = plt.figure(figsize=[figure_size[2][0], 3.5 * cm])
-
-    print('A')
-    # add axes for ccg plot
-    x_start = .1
-    y_start = .18
-    x_fig = .35
-    y_fig = .8
-    
-    # panel B: NE vs coincident spike efficacy
-    print('A')
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    pairs["ns"] = list(map(int, pairs["target_waveform_tpd"] < .45))
-    for i in range(2):
-        pairs_tmp = pairs.query(f"ns == {i}")
-        try:
-            ax.scatter(pairs_tmp['efficacy_hiact_median'], 
-                       pairs_tmp['efficacy_ne_spon'], 
-                       s=pairs_tmp['cne_size'] * 2,  color=tpd_color[i], edgecolor='w', alpha=.8)
-        except KeyError:
-            ax.scatter(pairs_tmp['efficacy_hiact_median'], 
-                       pairs_tmp['efficacy_ne_spon'], 
-                       s=15,  color=tpd_color[i], edgecolor='w', alpha=.8)
-        _, p = stats.wilcoxon(pairs_tmp['efficacy_hiact_median'], pairs_tmp['efficacy_ne_spon'])
-        print('p =', p)
-        if p > .001:
-            ax.text(2, 23, f'p = {p:.3f}', fontsize=7)
-        else:
-            ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
-    ax.plot([0, 30], [0, 30], 'k')
-    ax.set_xlim([0, 30])
-    ax.set_ylim([0, 30])
-    ax.set_xticks(range(0, 31, 10))
-    ax.set_yticks(range(0, 31, 10))
-    ax.set_xlabel('Coincident spike efficacy (%)')
-    ax.set_ylabel('cNE spike efficacy (%)')
-
-    # panel D-i: BS/NS neurons
-    print('B-ii')
-    x_start = .6
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    pairs['efficacy_gain'] = (pairs['efficacy_ne_spon'] - pairs['efficacy_hiact_median'])
-    boxplot_scatter(ax, x='ns', y='efficacy_gain', data=pairs, size=3, jitter=.3,
-                    order=[1, 0], hue='ns', palette=tpd_color[1::-1], hue_order=[1, 0])
-    ax.set_xticklabels(['NS', 'BS'])
-    ax.set_xlabel('A1 neuron type')
-    ax.set_ylabel('Efficacy gain (%)')
-    
-    _, p = stats.mannwhitneyu(pairs[pairs.ns == 1]['efficacy_gain'], 
-                              pairs[pairs.ns == 0]['efficacy_gain'])
-    print('p =', p)
-    print('NS: ', pairs['ns'].sum())
-    print('BS: ', len(pairs) - pairs['ns'].sum())
-    plot_significance_star(ax, p, [0, 1], 15, 16)
-    ax.plot([-.5, 1.5], [0, 0], 'k--')
-    ax.set_ylim([-10, 15])
-    ax.set_yticks(range(-10, 16, 5))
-    ax.set_xlim([-.5, 1.5])
-    
-    fig.savefig(os.path.join(figfolder, f'fig7-{coincidence}.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, f'fig7-{coincidence}.pdf'), dpi=300)
     
 
 def plot_delta_dfficacy_ne_vs_hiact(axes, datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
