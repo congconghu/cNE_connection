@@ -329,7 +329,7 @@ def plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_
     
     return fig, ne_neuron_pairs
 
-def plot_position_on_probe(ax, pairs, units):
+def plot_position_on_probe(ax, pairs, units, location='MGB'):
     """
     Plot neurons and ne members along the probe, where ne members are black dots.
 
@@ -352,11 +352,19 @@ def plot_position_on_probe(ax, pairs, units):
     for unit in units:
         ax.scatter(unit.position[0], unit.position[1], s=2, color='k')
         position_idx.append(unit.position_idx)
-    for i in range(len(pairs)):
-        pair = pairs.iloc[i]
-        unit = units[pair.input_idx]
-        ax.scatter(unit.position[0], unit.position[1], s=4, color='r')
-        ax.text(unit.position[0], unit.position[1], f'{unit.position_idx+1}', fontsize=6)
+    if location == 'MGB':
+        for i in range(len(pairs)):
+            pair = pairs.iloc[i]
+            unit = units[pair.input_idx]
+            ax.scatter(unit.position[0], unit.position[1], s=6, color='r')
+            ax.text(unit.position[0], unit.position[1], f'{unit.position_idx+1}', fontsize=6)
+    elif location == 'A1':
+        unit = units[pairs.iloc[0].target_idx]
+        ax.scatter(unit.position[0], unit.position[1], s=6, color='r')
+        ax.set_xlim([-150, 400])
+        ax.yaxis.tick_right()
+        ax.spines[['right']].set_visible(True)
+        ax.spines[['left']].set_visible(False)
     ax.get_xaxis().set_visible(False)
     ax.spines[['bottom']].set_visible(False)
     ax.invert_yaxis()
@@ -1227,8 +1235,12 @@ def plot_efficacy_change_vs_target_fr(ax, stim="spon",
 
 
 def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connection\data-summary', 
-                              stim='spon', change=None, celltype=False, sig=False, subsample=False):
-    pairs = pd.read_json(os.path.join(datafolder, f'ne-pairs-{stim}.json'))
+                              stim='spon', change=None, celltype=False, sig=False, subsample=False, coincidence=False):
+    if coincidence:
+        file = r"ne-pairs-act-level-spon-10ms.json"
+    else:
+        file = f'ne-pairs-{stim}.json'
+    pairs = pd.read_json(os.path.join(datafolder, file))
    
     pairs = pairs[pairs[f'inclusion_{stim}']]
     pairs = pairs[(pairs[f'efficacy_ne_{stim}'] > 0) & (pairs[f'efficacy_nonne_{stim}'] > 0)]
@@ -1240,6 +1252,8 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
     if subsample:
         pairs[f'efficacy_ne_{stim}'] = pairs[f'efficacy_ne_{stim}_subsample']
         pairs[f'efficacy_nonne_{stim}'] = pairs[f'efficacy_nonne_{stim}_subsample']
+    elif coincidence:
+        pairs[f'efficacy_nonne_{stim}'] = pairs['efficacy_hiact_median'];
         
     if celltype:
         # color-code cell types
@@ -1260,7 +1274,7 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
                 ax.text(2, 23, f'p = {p:.2e}', fontsize=7)
     else:
         ax.scatter(pairs[f'efficacy_nonne_{stim}'], pairs[f'efficacy_ne_{stim}'], 
-                   s=15, color='grey', edgecolor='w')
+                   s=15, color='k', edgecolor='w')
         _, p = stats.wilcoxon(pairs[f'efficacy_ne_{stim}'], pairs[f'efficacy_nonne_{stim}'])
         print('p =', p)
         if p > .001:
@@ -1392,7 +1406,7 @@ def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-summary',
     # panel C: NE vs nonNE spike efficacy
     print('B-i')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_efficacy_ne_vs_nonne(ax, stim='spon_ss',  celltype=True)
+    plot_efficacy_ne_vs_nonne(axes[0], stim='spon',  celltype=True)
     ax.set_xlim([0, 30])
     ax.set_ylim([0, 30])
     ax.set_xticks(range(0, 31, 10), labelsize=6.5)
@@ -1638,9 +1652,11 @@ def plot_delta_dfficacy_ne_vs_hiact_hist(ax, datafolder=r'E:\Congcong\Documents\
     ax.set_xticklabels(['NE spikes', 'coincident spikes'], rotation=0)
 
 
-def figure3_v2(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2'):
     
+    fig = plt.figure(figsize=[17.6*cm, 8.5*cm])
+    # PART1: plot example cNE and A1 connectin
     # load nepiars
     example_file = os.path.join(datafolder, '200821_015617-site6-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
     nepairs = pd.read_json(example_file)
@@ -1654,21 +1670,93 @@ def figure3_v2(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     # plot example cen
     cne = 3
     target_idx = 32
-    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(
-        nepairs, cne, target_idx, input_units, target_units, patterns)
-    # adjust axes for ccg plot
-    axes = fig.get_axes()
-    axes[0].set_ylim([4600, 5800])
-    axes[0].invert_yaxis()
-    axes_ccg = axes[2:12]
-    for i, ax in enumerate(axes_ccg):
+    ne_neuron_pairs = nepairs[(nepairs.cne == cne) & (nepairs.target_idx == target_idx)].copy()
+    n_pairs = len(ne_neuron_pairs)
+    # 1. probe
+    # 1.1 MGB
+    x_start = .06
+    x_fig = .02
+    y_start = .02
+    y_fig = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    position_idx, position_order = plot_position_on_probe(ax, ne_neuron_pairs, input_units)
+    ax.set_ylim([5800, 4600])
+    ax.set_ylabel(r'Depth ($\mu$m)', labelpad=0)
+    # add axes for waveform plot
+    x_start = .09
+    y_start = .2
+    x_fig = .03
+    y_fig = .05
+    y_space = .01
+    axes = add_multiple_axes(fig, n_pairs, 1, x_start, y_start, x_fig, y_fig, 0, y_space)
+    position_idx_ne = [position_idx[unit_idx] + 1 for unit_idx in ne_neuron_pairs.input_idx]
+    ne_neuron_pairs['position_idx'] = position_idx_ne
+    ne_neuron_pairs = ne_neuron_pairs.sort_values(by='position_idx')
+    plot_all_waveforms(axes, ne_neuron_pairs, input_units, position_idx=position_idx)
+    for ax in axes:
+        ax[0].set_title('')
+    
+    x_start = .18
+    x_fig = .02
+    y_start = .15
+    y_fig = .4
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    _ = plot_position_on_probe(ax, ne_neuron_pairs, target_units, location='A1')
+    ax.set_ylim([1000, 200])
+    # add axes for waveform plot
+    x_start = .15
+    y_start = .35
+    x_fig = .03
+    y_fig = .05
+    ax = fig.add_axes([x_start, y_start,x_fig, y_fig])
+    plot_all_waveforms(np.array([ax]), ne_neuron_pairs, target_units, 'target')
+    ax.set_title('')
+    
+    # 2. icweight
+    #y_start = 1/ (1.8 * n_pairs + bottom_space)
+    #y_fig = 2 / (1.8 * n_pairs + bottom_space)
+    x_start = .06
+    x_fig = .15
+    y_start = .8
+    y_fig = .12
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    weights = patterns[cne]
+    weights = weights[position_order]
+    member_thresh = 1 / np.sqrt(patterns.shape[1])
+    plot_ICweight(ax, weights, member_thresh, direction='h', markersize=2)
+    ax.set_ylim([-.2, .8])
+    ax.set_yticks([0, .4, .8])
+    
+    # add axes for ccg plot
+    x_start = .3
+    y_start = .08
+    x_fig = .1
+    x_space = .015
+    y_fig = .14
+    y_space =  0.03
+    axes = add_multiple_axes(fig, n_pairs, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
+    plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs, stim='spon')
+    for ax in axes.flatten():
         ax.set_ylim([0, 100])
         ax.set_yticks(range(0, 101, 25))
-        if not i % 2:
-            ax.set_yticklabels([0, '', 50, '', 100])
-        else:
-            ax.set_yticklabels([])
-        
+        ax.set_yticklabels([])
+    for ax in axes[:, 0]:
+        ax.set_yticklabels([0, '', 50, '', 100])
+    
+    # summary plot 
+    x_start = .6
+    x_fig = .15
+    y_fig = .25
+    x_space = .08
+    y_space = .25
+    axes = add_multiple_axes(fig, 2, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
+    axes= axes.flatten()
+    plot_efficacy_ne_vs_nonne(axes[0], stim='spon')
+    plot_efficacy_ne_vs_nonne(axes[1], stim='spon', subsample=True)
+    plot_efficacy_ne_vs_nonne(axes[2], stim='spon_ss')
+    plot_efficacy_ne_vs_nonne(axes[3], stim='spon', coincidence=True)
+    axes[3].set_xlabel('Coincident spike efficacy (%)')
+    # plot raw data
     fig.savefig(os.path.join(figfolder, f'fig3.jpg'), dpi=300)
     fig.savefig(os.path.join(figfolder, f'fig3.pdf'), dpi=300)
 
