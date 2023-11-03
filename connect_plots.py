@@ -359,8 +359,10 @@ def plot_position_on_probe(ax, pairs, units, location='MGB'):
             ax.scatter(unit.position[0], unit.position[1], s=6, color='r')
             ax.text(unit.position[0], unit.position[1], f'{unit.position_idx+1}', fontsize=6)
     elif location == 'A1':
-        unit = units[pairs.iloc[0].target_idx]
-        ax.scatter(unit.position[0], unit.position[1], s=6, color='r')
+        for i in pairs.target_idx.unique():
+            unit = units[i]
+            ax.scatter(unit.position[0], unit.position[1], s=6, color='r')
+            ax.text(unit.position[0], unit.position[1], f'{i}:{unit.position_idx+1}', fontsize=6)
         ax.set_xlim([-150, 400])
         ax.yaxis.tick_right()
         ax.spines[['right']].set_visible(True)
@@ -407,26 +409,24 @@ def plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs, stim='spon'):
 
 
 def plot_all_waveforms(axes, pairs, units, unit_type='input', position_idx=None):
-    n_pairs = len(pairs) if unit_type == 'input' else 1
     if axes.ndim > 1:
         axes = axes.flatten()
-    for i in range(n_pairs):
-        unit_idx = pairs.iloc[i][f'{unit_type}_idx']
+    idx = pairs[f'{unit_type}_idx'].unique()
+    for i, unit_idx in enumerate(idx):
         unit = units[unit_idx]
         ax = axes[i]
         idx = np.where(unit.adjacent_chan == unit.chan)[0][0]
         waveform_mean = unit.waveforms_mean[idx, :]
         waveform_std = unit.waveforms_std[idx, :]
-        if unit_type == 'input':
-            plot_waveform(ax, waveform_mean, waveform_std)
-            if position_idx is not None:
-                ax.set_title('neuron #{}'.format(position_idx[unit_idx]+1), fontsize=6)
-            else:
-                ax.set_title('neuron #{}'.format(unit_idx+1), fontsize=6)
-        else:
+        if unit_type == 'target':
             tpd = unit.waveform_tpd
             plot_waveform(ax, waveform_mean, waveform_std, tpd=tpd)
-            ax.set_title('unit{}'.format(pairs.iloc[i][f'{unit_type}_unit']), fontsize=6)
+        else:
+            plot_waveform(ax, waveform_mean, waveform_std)
+        if position_idx is not None:
+            ax.set_title('neuron #{}'.format(position_idx[unit_idx]+1), fontsize=6)
+        else:
+            ax.set_title('neuron #{}'.format(unit_idx+1), fontsize=6)
 
 
 def add_multiple_axes(fig, nrows, ncols, x_start, y_start, x_fig, y_fig, x_space, y_space):
@@ -668,6 +668,7 @@ def figure1(datafolder='E:\Congcong\Documents\data\connection\data-pkl',
     
     
     # plot example STRFs
+    print('B-ii')
     x_start = .45
     y_start =  [.4, .1]
     x_waveform = .04
@@ -776,6 +777,8 @@ def batch_scatter_bf(ax, datafolder='E:\Congcong\Documents\data\connection\data-
     ax.set_xlabel('MGB neuron BF (kHz)')
     ax.set_ylabel('\u0394BF (oct)')
     print('n(ccg_{}) = {}'.format(stim, sum(idx)))
+    diff = bf_target-bf_input
+    print(diff.mean(), diff.std())
     
     
 def batch_plot_fr(ax, datafolder='E:\Congcong\Documents\data\connection\data-summary'):
@@ -811,10 +814,12 @@ def batch_plot_fr_pairs(ax, datafolder='E:\Congcong\Documents\data\connection\da
     sns.scatterplot(data=fr_target, x='target_fr_spon', y='target_fr_dmr', 
                     alpha=.8, ax=ax, s=10, color=A1_color[0])
     _, p = stats.wilcoxon(fr_input['input_fr_spon'], fr_input['input_fr_dmr'])
-    print('MGB: p=', p)
+    fr_diff = fr_input['input_fr_dmr'] - fr_input['input_fr_spon']
+    print('MGB: p=', p, fr_diff.mean(), fr_diff.std())
     print('n=', len(fr_input))
     _, p = stats.wilcoxon(fr_target['target_fr_spon'], fr_target['target_fr_dmr'])
-    print('A1: p=', p)
+    fr_diff = fr_target['target_fr_dmr'] - fr_target['target_fr_spon']
+    print('A1: p=', p, fr_diff.mean(), fr_diff.std())
     print('n=', len(fr_target))
     plt.plot([.1, 100], [.1, 100])
     ax.set_xlim([.1, 100])
@@ -1087,18 +1092,82 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
 
 
 def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
-            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure'):
+            figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2'):
     
-    example_file = os.path.join(
-        datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
+    fig = plt.figure(figsize=[17.6*cm, 7.5*cm])
+    # PART1: plot example cNE and A1 connectin
+    # load nepiars
+    example_file = os.path.join(datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
     nepairs = pd.read_json(example_file)
+    # load ne info
     exp = re.search('\d{6}_\d{6}', example_file).group(0)
     _, input_units, target_units, _ = load_input_target_files(datafolder, exp)
     nefile = re.sub('-pairs-ne-spon.json', '-ne-20dft-spon.pkl', example_file)
     with open(nefile, 'rb') as f:
         ne = pkl.load(f)
     patterns = ne.patterns
+    # plot example cen
     cne = 2
+    target_idx = [3, 38]
+    ne_neuron_pairs = nepairs[(nepairs.cne == cne) & (nepairs.target_idx.isin(target_idx))].copy()
+    n_pairs = len(ne_neuron_pairs.input_idx.unique())
+    ne_neuron_pairs1 = ne_neuron_pairs[nepairs.target_idx == target_idx[0]].copy()
+    ne_neuron_pairs2 = ne_neuron_pairs[nepairs.target_idx == target_idx[1]].copy()
+    ne_neuron_pairs
+    # 1. probe
+    # 1.1 MGB
+    x_start = .06
+    x_fig = .02
+    y_start = .02
+    y_fig = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    position_idx, position_order = plot_position_on_probe(ax, ne_neuron_pairs1, input_units)
+    ax.set_ylim([5800, 4600])
+    ax.set_ylabel(r'Depth ($\mu$m)', labelpad=0)
+    # add axes for waveform plot
+    x_start = .09
+    y_start = .2
+    x_fig = .03
+    y_fig = .05
+    y_space = .01
+    axes = add_multiple_axes(fig, n_pairs, 1, x_start, y_start, x_fig, y_fig, 0, y_space)
+    position_idx_ne = [position_idx[unit_idx] + 1 for unit_idx in ne_neuron_pairs1.input_idx]
+    ne_neuron_pairs1['position_idx'] = position_idx_ne
+    ne_neuron_pairs1 = ne_neuron_pairs1.sort_values(by='position_idx')
+    plot_all_waveforms(axes, ne_neuron_pairs1, input_units, position_idx=position_idx)
+    for ax in axes:
+        ax[0].set_title('')
+    # 1.2 A1
+    x_start = .18
+    x_fig = .02
+    y_start = .15
+    y_fig = .4
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    _ = plot_position_on_probe(ax, ne_neuron_pairs, target_units, location='A1')
+    ax.set_ylim([1000, 200])
+    # add axes for waveform plot
+    x_start = .15
+    y_start = .35
+    x_fig = .03
+    y_fig = .05
+    axes = add_multiple_axes(fig, 2, 1, x_start, y_start, x_fig, y_fig, 0, y_space)
+    plot_all_waveforms(axes, ne_neuron_pairs, target_units, 'target')
+    
+    # 2. icweight
+    #y_start = 1/ (1.8 * n_pairs + bottom_space)
+    #y_fig = 2 / (1.8 * n_pairs + bottom_space)
+    x_start = .06
+    x_fig = .2
+    y_start = .8
+    y_fig = .12
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    weights = patterns[cne]
+    weights = weights[position_order]
+    member_thresh = 1 / np.sqrt(patterns.shape[1])
+    plot_ICweight(ax, weights, member_thresh, direction='h', markersize=2)
+    ax.set_ylim([-.2, .8])
+    ax.set_yticks([0, .4, .8])
+    
     # cNE2-A1_33
     target_idx = 3
     fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
@@ -1123,12 +1192,128 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         ax.set_ylim([0, 150])
         ax.set_yticks(range(0, 151, 50))
         ax.set_yticklabels(range(0, 151, 50))
-    fig.savefig(os.path.join(figfolder, 'fig3-2.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-2.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig5.pdf'), dpi=300)
     plt.close()
 
 def figure6(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2'):
+    
+    
+    fig = plt.figure(figsize=[17.6*cm, 6.5*cm])
+    # PART1: plot example cNE and A1 connectin
+    # load nepiars
+    example_file = os.path.join(datafolder, '220825_005353-site6-5500um-25db-dmr-61min-H31x64-fs20000-pairs-ne-spon.json')
+    nepairs = pd.read_json(example_file)
+    # load ne info
+    exp = re.search('\d{6}_\d{6}', example_file).group(0)
+    _, input_units, target_units, _ = load_input_target_files(datafolder, exp)
+    nefile = re.sub('-pairs-ne-spon.json', '-ne-20dft-spon.pkl', example_file)
+    with open(nefile, 'rb') as f:
+        ne = pkl.load(f)
+    patterns = ne.patterns
+    # plot example cen
+    
+    target_idx = 10
+    cne = [4, 3]
+    ne_neuron_pairs1 = nepairs[(nepairs.cne == cne[0]) & (nepairs.target_idx == target_idx)].copy()
+    ne_neuron_pairs2 = nepairs[(nepairs.cne == cne[1]) & (nepairs.target_idx == target_idx)].copy()
+    # 1. probe
+    # 1.1 A1
+    x_start = .06
+    x_fig = .02
+    y_start = .02
+    y_fig = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    _ = plot_position_on_probe(ax, ne_neuron_pairs1, target_units, location='A1')
+    ax.yaxis.tick_left()
+    ax.set_xlim([-100, 100])
+    ax.spines[['right']].set_visible(False)
+    ax.spines[['left']].set_visible(True)
+    ax.set_ylim([1250, 0])
+    ax.set_ylabel(r'Depth ($\mu$m)', labelpad=0)
+
+    # add axes for waveform plot
+    x_start = .09
+    y_start = .35
+    x_fig = .03
+    y_fig = .05
+    y_space = .01
+    axes = add_multiple_axes(fig, 1, 1, x_start, y_start, x_fig, y_fig, 0, y_space)
+    plot_all_waveforms(axes, ne_neuron_pairs1, target_units, 'target')
+    
+    # 1.2.1 MGB
+    x_start = .18
+    x_fig = .02
+    y_start = .02
+    y_fig = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    position_idx, position_order = plot_position_on_probe(ax, ne_neuron_pairs1, input_units)
+    ax.set_ylim([5500, 4300])
+    ax.set_axis_off()
+    # add axes for waveform plot
+    x_start = .15
+    y_start = .2
+    x_fig = .03
+    y_fig = .05
+    n_pairs = len(ne_neuron_pairs1)
+    axes = add_multiple_axes(fig, n_pairs, 1, x_start, y_start, x_fig, y_fig, 0, y_space)
+    position_idx_ne = [position_idx[unit_idx] + 1 for unit_idx in ne_neuron_pairs1.input_idx]
+    ne_neuron_pairs1['position_idx'] = position_idx_ne
+    ne_neuron_pairs1 = ne_neuron_pairs1.sort_values(by='position_idx')
+    plot_all_waveforms(axes, ne_neuron_pairs1, input_units, position_idx=position_idx)
+    for ax in axes:
+        ax[0].set_title('')
+    #1.2.2
+    x_start = .25
+    x_fig = .02
+    y_start = .02
+    y_fig = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    position_idx, position_order = plot_position_on_probe(ax, ne_neuron_pairs2, input_units)
+    ax.set_ylim([5500, 4300])
+    ax.set_yticks(range(4300, 5501, 200))
+    ax.yaxis.tick_right()
+    ax.spines[['right']].set_visible(True)
+    ax.spines[['left']].set_visible(False)
+    # add axes for waveform plot
+    x_start = .22
+    y_start = .2
+    x_fig = .03
+    y_fig = .05
+    n_pairs = len(ne_neuron_pairs2)
+    axes = add_multiple_axes(fig, n_pairs, 1, x_start, y_start, x_fig, y_fig, 0, y_space)
+    position_idx_ne = [position_idx[unit_idx] + 1 for unit_idx in ne_neuron_pairs2.input_idx]
+    ne_neuron_pairs2['position_idx'] = position_idx_ne
+    ne_neuron_pairs2 = ne_neuron_pairs2.sort_values(by='position_idx')
+    plot_all_waveforms(axes, ne_neuron_pairs2, input_units, position_idx=position_idx)
+    for ax in axes:
+        ax[0].set_title('')
+   
+    
+    # 2. icweight
+    #y_start = 1/ (1.8 * n_pairs + bottom_space)
+    #y_fig = 2 / (1.8 * n_pairs + bottom_space)
+    x_start = .06
+    x_fig = .12
+    y_start = .8
+    y_fig = .12
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    weights = patterns[cne[0]]
+    weights = weights[position_order]
+    member_thresh = 1 / np.sqrt(patterns.shape[1])
+    plot_ICweight(ax, weights, member_thresh, direction='h', markersize=2)
+    ax.set_ylim([-.2, .8])
+    ax.set_yticks([0, .4, .8])
+    x_start = .25
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    weights = patterns[cne[1]]
+    weights = weights[position_order]
+    plot_ICweight(ax, weights, member_thresh, direction='h', markersize=2)
+    ax.set_ylim([-.2, .8])
+    ax.set_yticks([0, .4, .8])
+    fig.savefig(os.path.join(figfolder, 'fig6.pdf'), dpi=300)
+
+
     
     example_file = os.path.join(
         datafolder, '220825_005353-site6-5500um-25db-dmr-61min-H31x64-fs20000-pairs-ne-spon.json')
