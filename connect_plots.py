@@ -1074,6 +1074,7 @@ def plot_prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\da
         prob_share_tmp = prob_share[prob_share.within_ne == 1 - c]
         ax.scatter(c * np.ones(len(prob_share)//2), prob_share_tmp['share_target'], 
                    facecolor=ebar_colors[c], s=prob_share_tmp['n']*2, edgecolor='w', linewidth=.5)
+        print('n=', prob_share_tmp['n'].sum())
     ax.scatter([.8, 1, 1.2], [.6, .6, .6], facecolor='k', s=np.array([5, 10, 20])*2, edgecolor='w', linewidth=.5)
     ax.set_ylabel('P(share A1 target)')
     
@@ -1097,7 +1098,7 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     fig = plt.figure(figsize=[17.6*cm, 7.5*cm])
     # PART1: plot example cNE and A1 connectin
     # load nepiars
-    example_file = os.path.join(datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-spon.json')
+    example_file = os.path.join(datafolder, '200821_001135-site5-5655um-25db-dmr-30min-H31x64-fs20000-pairs-ne-spon.json')
     nepairs = pd.read_json(example_file)
     # load ne info
     exp = re.search('\d{6}_\d{6}', example_file).group(0)
@@ -1107,13 +1108,12 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         ne = pkl.load(f)
     patterns = ne.patterns
     # plot example cen
-    cne = 2
-    target_idx = [3, 38]
+    cne = 3
+    target_idx = [2, 53]
     ne_neuron_pairs = nepairs[(nepairs.cne == cne) & (nepairs.target_idx.isin(target_idx))].copy()
     n_pairs = len(ne_neuron_pairs.input_idx.unique())
     ne_neuron_pairs1 = ne_neuron_pairs[nepairs.target_idx == target_idx[0]].copy()
     ne_neuron_pairs2 = ne_neuron_pairs[nepairs.target_idx == target_idx[1]].copy()
-    ne_neuron_pairs
     # 1. probe
     # 1.1 MGB
     x_start = .06
@@ -1168,30 +1168,38 @@ def figure5(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     ax.set_ylim([-.2, .8])
     ax.set_yticks([0, .4, .8])
     
-    # cNE2-A1_33
-    target_idx = 3
-    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
-    axes = fig.get_axes()
-    axes[0].set_ylim([4600, 5800])
-    axes[0].invert_yaxis()
-    axes_ccg = axes[2:8]
-    for ax in axes_ccg:
+    # cNE3-A1_17
+    # add axes for ccg plot
+    x_start = .38
+    y_start = .08
+    x_fig = .12
+    x_space = .02
+    y_fig = .18
+    y_space =  0.03
+    ne_neuron_pairs1 = ne_neuron_pairs1[ne_neuron_pairs1.position_idx != 13]
+    axes = add_multiple_axes(fig, 3, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
+    plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs1, stim='spon')
+    for ax in axes.flatten():
         ax.set_ylim([0, 200])
         ax.set_yticks(range(0, 201, 50))
-        ax.set_yticklabels([0, '', 100, '', 200])
-    fig.savefig(os.path.join(figfolder, 'fig3-1.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, 'fig3-1.pdf'), dpi=300)
-    # cNE2-A1_43
-    target_idx = 38
-    fig, ne_neuron_pairs = plot_ne_neuron_connection_ccg(nepairs, cne, target_idx, input_units, target_units, patterns)
-    axes = fig.get_axes()
-    axes[0].set_ylim([4600, 5800])
-    axes[0].invert_yaxis()
-    axes_ccg = axes[2:8]
-    for ax in axes_ccg:
-        ax.set_ylim([0, 150])
-        ax.set_yticks(range(0, 151, 50))
-        ax.set_yticklabels(range(0, 151, 50))
+        ax.set_yticklabels([])
+    for ax in axes[:, 0]:
+        ax.set_yticklabels([0, '', 100, '', 200]) 
+    
+    # cNE3-A1_79
+    ne_neuron_pairs2['position_idx'] = position_idx_ne
+    ne_neuron_pairs2 = ne_neuron_pairs2.sort_values(by='position_idx')
+    ne_neuron_pairs2 = ne_neuron_pairs2[ne_neuron_pairs2.position_idx != 13]
+    x_start = .72
+    axes = add_multiple_axes(fig, 3, 2, x_start, y_start, x_fig, y_fig, x_space, y_space)
+    plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs2, stim='spon')
+    for ax in axes.flatten():
+        ax.set_ylim([0, 100])
+        ax.set_yticks(range(0, 101, 25))
+        ax.set_yticklabels([])
+    for ax in axes[:, 0]:
+        ax.set_yticklabels([0, '', 50, '', 100]) 
+        
     fig.savefig(os.path.join(figfolder, 'fig5.pdf'), dpi=300)
     plt.close()
 
@@ -1438,7 +1446,8 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
         pairs[f'efficacy_ne_{stim}'] = pairs[f'efficacy_ne_{stim}_subsample']
         pairs[f'efficacy_nonne_{stim}'] = pairs[f'efficacy_nonne_{stim}_subsample']
     elif coincidence:
-        pairs[f'efficacy_nonne_{stim}'] = pairs['efficacy_hiact_median'];
+        pairs[f'efficacy_nonne_{stim}'] = pairs['efficacy_hiact_mean'];
+        pairs[f'efficacy_ne_{stim}'] = pairs['efficacy_ne_subsample_hiact'];
         
     if celltype:
         # color-code cell types
