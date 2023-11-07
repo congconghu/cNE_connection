@@ -25,7 +25,7 @@ from scipy import stats
 from plot_box import plot_strf
 import ne_toolbox as netools
 import helper
-
+import collections
 
 def load_input_target_files(datafolder, file_id):
     if not isinstance(file_id, str):
@@ -1015,20 +1015,23 @@ def batch_get_effiacay_coincident_spk(
             context_idx = np.argmax(corr_mat[pair.input_idx][members])
             context_input = [input_units[members[context_idx]]]
             n_members=None
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_spiketimes = ne.member_ne_spikes[cne][member_idx].spiketimes
         
-        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, context_input, 
+        pair = get_effiacay_coincident_spk(pair, input_unit, target_unit, context_input, ne_spiketimes,
                                            stim=stim, window=window, group_size=n_members)
-        pairs_included.append(pair)
+        if pair is not None:
+            pairs_included.append(pair)
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
     pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-{coincidence}-{stim}-{window}ms.json'))
 
 
-def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, 
-                                stim='spon', window=10, group_size=None, maxrep=1000):
+def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, ne_spiketimes,
+                                stim='spon', window=10, group_size=None, maxrep=1000, nsubsample=10):
     random.seed(0)
     s = stim.split("_")[0]
-
+    ne_spiketimes = sorted(ne_spiketimes)
     # get input and target spike times
     target_spiketimes = eval(f'target_unit.spiketimes_{s}')
     input_spiketimes = eval(f'input_unit.spiketimes_{s}')
@@ -1039,37 +1042,48 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units,
     
     if not group_size:
         group_size = len(context_units) + 1
-        nrep = 1
         combinations = [range(len(context_units))]
     else:
         combinations = itertools.combinations(range(len(context_units)), group_size - 1)
         combinations = list(combinations)
-        if len(combinations) > maxrep:
-            nrep = maxrep
-            combinations = random.sample(combinations, nrep)
-        else:
-            nrep = len(combinations)
-    
+    random.shuffle(combinations)
     efficacy_hiact = []
+    nrep = 0
+    hiact_spiketimes = []
     for combination in combinations:
         context = [context_units[x] for x in combination]
-        input_spiketimes_hiact, input_spiketimes_lowact = \
+        input_spiketimes_hiact, _ = \
             get_hiact_spikes(input_unit, context, stim, window=window)
-        
-        ccg, edges, nspk = get_ccg(input_spiketimes_hiact, target_spiketimes)
-        taxis = (edges[:-1] + edges[1:]) / 2
-        try:
-            efficacy = get_efficacy(ccg, nspk, taxis)
-            efficacy_hiact.append(efficacy)
-        except TypeError:
-            continue
-        
-    pair['ccg_hiact_example'] = ccg
-    pair['nspk_hiact_example'] = nspk
-    pair['efficacy_hiact_example'] = efficacy
-    pair['efficacy_hiact'] = efficacy_hiact
-    pair['efficacy_hiact_median'] = np.median(efficacy_hiact)
+        if len(input_spiketimes_hiact) > 100:
+            hiact_spiketimes.append(input_spiketimes_hiact)
+            nrep += 1
+            if nrep >= maxrep: break
+            if not nrep % 10:
+                print('getting spiketimes for combinations: ', nrep)
+    if nrep == 0: return None
+    n_event = min(min([len(spiketimes) for spiketimes in hiact_spiketimes]), len(ne_spiketimes))
+    # subsample spikes
+    efficacy_hiact = np.zeros([nrep, nsubsample])
+    for i, spiketimes in enumerate(hiact_spiketimes):
+        print("get efficacy for combination {}/{}".format(i+1, len(hiact_spiketimes)))
+        for j in range(nsubsample):
+            spiketimes_tmp = random.sample(spiketimes, n_event)
+            ccg, edges, taxis = get_ccg(spiketimes_tmp, target_spiketimes)
+            efficacy_hiact[i, j] = get_efficacy(ccg, n_event, taxis)
+    efficacy_ne = np.zeros(nsubsample)
+    for i in range(nsubsample):
+        spiketimes_tmp = random.sample(ne_spiketimes, n_event)
+        ccg, edges, taxis = get_ccg(spiketimes_tmp, target_spiketimes)
+        efficacy_ne[i] = get_efficacy(ccg, n_event, taxis)
     
+    pair['ccg_hiact_example'] = ccg
+    pair['nspk_hiact'] = n_event
+    pair['efficacy_hiact_example'] = efficacy_hiact[-1, -1]
+    pair['efficacy_hiact'] = np.mean(efficacy_hiact, axis=1)
+    pair['efficacy_hiact_median'] = np.median(pair['efficacy_hiact'])
+    pair['efficacy_hiact_mean'] = np.mean(pair['efficacy_hiact'])
+    pair['efficacy_ne_subsample_hiact_mean'] = efficacy_ne.mean()
+    pair['efficacy_ne_subsample_hiact_median'] = np.median(efficacy_ne)
     return pair
 
 
@@ -1305,4 +1319,54 @@ def get_target_nspk(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
     pairs.to_json(pair_file)
         
         
-    
+def batch_get_A1_nspk_after_MGB_spike(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+       summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pair_file = os.path.join(summary_folder, 'ne-pairs-spon-subsampled.json')
+    pairs = pd.read_json(pair_file)
+    pairs = pairs[pairs['inclusion_spon'] 
+                  & (pairs['efficacy_ne_spon'] > 0) 
+                  & (pairs['efficacy_nonne_spon'] > 0)]
+    exp_loaded = None
+    pairs_included = []
+    s = 'spon'
+    for i in range(len(pairs)):
+        print('{} / {}'.format(i + 1, len(pairs)))
+        pair = pairs.iloc[i].copy(deep=True)
+        exp = pair.exp
+        exp = str(exp)
+        exp = exp[:6] + '_' + exp[6:] 
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp_loaded = exp
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-{s}.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+        
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        cne = pair.cne
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_spiketimes = ne.member_ne_spikes[cne][member_idx].spiketimes
+        nonne_spiketimes = list(set(input_unit.spiketimes_spon).difference(set(ne_spiketimes)))
+        assert(len(ne_spiketimes) + len(nonne_spiketimes) == len(input_unit.spiketimes_spon))
+        pair = get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_unit.spiketimes_spon)
+        if pair is not None:
+            pairs_included.append(pair)
+    pairs_included = pd.DataFrame(pairs_included)
+    pairs_included.reset_index(inplace=True, drop=True)
+    pairs_included.to_json(os.path.join(summary_folder, 'ne-pairs-nspk_following_ne_nonne.json'))
+
+
+def get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_spiketimes):
+    ne_spiketimes = np.array(ne_spiketimes)
+    nonne_spiketimes = np.array(nonne_spiketimes)
+    target_spiketimes = np.array(target_spiketimes)
+    for input_type in ('ne', 'nonne'):
+        input_spiketimes = eval(f'{input_type}_spiketimes')
+        nspk = np.zeros(input_spiketimes.size)
+        for i, spk in enumerate(input_spiketimes):
+            t_diff = target_spiketimes - spk
+            nspk[i] = sum((t_diff > 1) & (t_diff <=4))
+        nspk = nspk.astype(int)
+        pair[f'{input_type}_nspk_following'] = collections.Counter(nspk)
+    return pair

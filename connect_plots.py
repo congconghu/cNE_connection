@@ -1370,12 +1370,12 @@ def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
             subsample=False):
     
-    fig = plt.figure(figsize=[figure_size[2][0], figure_size[2][0]])
+    fig = plt.figure(figsize=[figure_size[2][0], 12.5 * cm])
     x_fig = .35
-    y_fig = .3
+    y_fig = .2
     # panel A: BS/NS neurons waveform ptd
     print('A')
-    y_start = .6
+    y_start = .7
     x_start = .1
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_waveform_ptd(ax=ax)
@@ -1389,7 +1389,7 @@ def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     # plot_efficacy_gain_cell_type(ax=ax, subsample=subsample)
     
     x_start = .1
-    y_start = .1
+    y_start = .4
     # panel C: efficacy gain vs fr
     print('C')
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
@@ -1398,6 +1398,17 @@ def figure4(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     x_start = .6
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_contribution(ax)
+    
+    x_start = .1
+    y_start = .1
+    # panel E: percentage of spikes followed by A1 firing
+    print('E')
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_percent_spike_with_A1_firing(ax)
+    print('F')
+    x_start = .6
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    plot_A1_nspk_following(ax)
     
     fig.savefig(os.path.join(figfolder, 'fig4.jpg'), dpi=300)
     fig.savefig(os.path.join(figfolder, 'fig4.pdf'), dpi=300)
@@ -1446,8 +1457,8 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
         pairs[f'efficacy_ne_{stim}'] = pairs[f'efficacy_ne_{stim}_subsample']
         pairs[f'efficacy_nonne_{stim}'] = pairs[f'efficacy_nonne_{stim}_subsample']
     elif coincidence:
-        pairs[f'efficacy_nonne_{stim}'] = pairs['efficacy_hiact_mean'];
-        pairs[f'efficacy_ne_{stim}'] = pairs['efficacy_ne_subsample_hiact'];
+        pairs[f'efficacy_nonne_{stim}'] = pairs['efficacy_hiact_mean']
+        pairs[f'efficacy_ne_{stim}'] = pairs['efficacy_ne_subsample_hiact_mean']
         
     if celltype:
         # color-code cell types
@@ -1499,6 +1510,7 @@ def plot_efficacy_ne_vs_nonne(ax, datafolder=r'E:\Congcong\Documents\data\connec
     ax.set_yticks(range(0, 31, 10))
     ax.set_xlabel('non-cNE spike efficacy (%)')
     ax.set_ylabel('cNE spike efficacy (%)')
+    print(len(pairs))
 
     
     
@@ -1822,8 +1834,7 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     plot_efficacy_ne_vs_nonne(axes[3], stim='spon', coincidence=True)
     axes[3].set_xlabel('Coincident spike efficacy (%)')
     # plot raw data
-    fig.savefig(os.path.join(figfolder, f'fig3.jpg'), dpi=300)
-    fig.savefig(os.path.join(figfolder, f'fig3.pdf'), dpi=300)
+    fig.savefig(os.path.join(figfolder, 'fig3.pdf'), dpi=300)
 
 
 def plot_contribution(ax, summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
@@ -1842,4 +1853,101 @@ def plot_contribution(ax, summary_folder=r'E:\Congcong\Documents\data\connection
     ax.set_ylabel('MGB neuron contribution (%)')
     ax.set_ylim([0, 15])
     _, p = stats.mannwhitneyu(pairs[pairs.ns]["contribution_spon"], pairs[pairs.ns == False]["contribution_spon"])
+
+
+def plot_percent_spike_with_A1_firing(ax, summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pairs = pd.read_json(os.path.join(summary_folder, 'ne-pairs-nspk_following_ne_nonne.json'))
+    ne_nspk_following = np.zeros([len(pairs), 4])
+    nonne_nspk_following = np.zeros([len(pairs), 4])
+    for i in range(len(pairs)):
+        for input_type in ('ne', 'nonne'):
+            nspk = pairs.iloc[i][f'{input_type}_nspk_following']
+            for n, c in nspk.items():
+                n = int(n)
+                if input_type == 'ne':
+                    ne_nspk_following[i][n] = c
+                else:
+                    nonne_nspk_following[i][n] = c
+    # percent of spikes followed by A1 spike
+    ne_prc = np.sum(ne_nspk_following[:, 1:], axis=1)/np.sum(ne_nspk_following, axis=1)
+    prc1 = pd.DataFrame({'target_waveform_tpd': pairs['target_waveform_tpd'], 'prc_w_spk': ne_prc})
+    prc1['ne'] = True
+    nonne_prc = np.sum(nonne_nspk_following[:, 1:], axis=1)/np.sum(nonne_nspk_following, axis=1)
+    prc2 = pd.DataFrame({'target_waveform_tpd': pairs['target_waveform_tpd'], 'prc_w_spk': nonne_prc})
+    prc2['ne'] = False
+    prc = pd.concat([prc1, prc2])
+    prc['ns'] = prc['target_waveform_tpd'] < .45
+    prc['ne_ns'] = prc['ne'].astype(str) + '_' + prc['ns'].astype(str)
+    order=['True_True', 'False_True', 'True_False', 'False_False']
+    colors = [tpd_color[x] for x in [1, 2, 0, 3]]
+    boxplot_scatter(ax, x='ne_ns', y='prc_w_spk', data=prc, 
+                    order=order, hue='ne_ns', palette=colors, 
+                    hue_order=order, size=1.5, alpha=1, jitter=.3)
+    model = ols( 'prc_w_spk ~ C(ne) + C(ns) +C(ne):C(ns)', data=prc).fit() 
+    result = sm.stats.anova_lm(model, typ=2)
+    print(result)
+    # test for ne, nonne
+    for i, ns in enumerate((True, False)):
+        prc_tmp = prc[prc.ns == ns]
+        _, p = stats.wilcoxon(prc_tmp[prc_tmp['ne']].prc_w_spk, prc_tmp[~prc_tmp['ne']].prc_w_spk)
+        p *= 4
+        print(p)
+        plot_significance_star(ax, p, [i*2, i*2+1], .48, .49)
+    # test for cell type
+    for i, ne in enumerate((True, False)):
+        prc_tmp = prc[prc['ne'] == ne]
+        _, p = stats.mannwhitneyu(prc_tmp[prc_tmp['ns']].prc_w_spk, prc_tmp[~prc_tmp['ns']].prc_w_spk)
+        p *= 4
+        print(p)
+        plot_significance_star(ax, p, [i, i+2], .55 + .05*i, .56 + .05*i)
     
+    ax.set_xticklabels([])
+    ax.set_xlabel('')
+    ax.set_ylabel('Proportion of spikes\nfollowed by A1 activity (%)')
+    ax.set_ylim([0, .6])
+                 
+    
+def plot_A1_nspk_following(ax, summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pairs = pd.read_json(os.path.join(summary_folder, 'ne-pairs-nspk_following_ne_nonne.json'))
+    ne_nspk_following = np.zeros([len(pairs), 4])
+    nonne_nspk_following = np.zeros([len(pairs), 4])
+    for i in range(len(pairs)):
+        for input_type in ('ne', 'nonne'):
+            nspk = pairs.iloc[i][f'{input_type}_nspk_following']
+            for n, c in nspk.items():
+                n = int(n)
+                if input_type == 'ne':
+                    ne_nspk_following[i][n] = c
+                else:
+                    nonne_nspk_following[i][n] = c
+    # percent of spikes followed by A1 spike
+    ne_nspk = np.sum(ne_nspk_following[:, 1:] * range(1,4), axis=1)/np.sum(ne_nspk_following[:, 1:], axis=1)
+    nspk1 = pd.DataFrame({'target_waveform_tpd': pairs['target_waveform_tpd'], 'nspk': ne_nspk})
+    nspk1['ne'] = True
+    nonne_nspk = np.sum(nonne_nspk_following[:, 1:] * range(1,4), axis=1)/np.sum(nonne_nspk_following[:, 1:], axis=1)
+    nspk2 = pd.DataFrame({'target_waveform_tpd': pairs['target_waveform_tpd'], 'nspk': nonne_nspk})
+    nspk2['ne'] = False
+    nspk = pd.concat([nspk1, nspk2])
+    nspk['ns'] = nspk['target_waveform_tpd'] < .45
+    nspk['ne_ns'] = nspk['ne'].astype(str) + '_' + nspk['ns'].astype(str)
+    order=['True_True', 'False_True', 'True_False', 'False_False']
+    colors = [tpd_color[x] for x in [1, 2, 0, 3]]
+    boxplot_scatter(ax, x='ne_ns', y='nspk', data=nspk, 
+                    order=order, hue='ne_ns', palette=colors, 
+                    hue_order=order, size=1.5, alpha=1, jitter=.3)
+    model = ols( 'nspk ~ C(ne) + C(ns) +C(ne):C(ns)', data=nspk).fit() 
+    result = sm.stats.anova_lm(model, typ=2)
+    print(result)
+    # test for cell type
+    for i, ne in enumerate((True, False)):
+        nspk_tmp = nspk[nspk['ne'] == ne]
+        _, p = stats.mannwhitneyu(nspk_tmp[nspk_tmp['ns']].nspk, nspk_tmp[~nspk_tmp['ns']].nspk)
+        p *= 2
+        print(p)
+        plot_significance_star(ax, p, [i, i+2], 1.24 + .05 * i, 1.245 + .05*i)
+    
+    ax.set_xticklabels([])
+    ax.set_xlabel('')
+    ax.set_ylabel('Mean # of A1 spikes follwing')
+    ax.set_ylim([.99, 1.3])
+                    
