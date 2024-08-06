@@ -31,13 +31,14 @@ datafolder =  r'E:\Congcong\Documents\data\cne_ftc\data'
 stim_times_folder = datafolder
 unit_info_folder = datafolder
 unitfolder = os.path.join(datafolder, 'units_pkl')
-figfolder = os.path.join(datafolder, 'figure', 'ftc')
+figfolder =  r'E:\Congcong\Documents\data\cne_ftc\figure\ftc'
 
 unit_files = glob.glob(os.path.join(unitfolder, 'units_*.pkl'))
-for file in unit_files:
+n_files = len(unit_files)
+for i, file in enumerate(unit_files):
+    print(f'{i}/{n_files} get frequency tuning curve for {file}')
     with open(file, 'rb') as f:
         session = pickle.load(f)
-        
     session.calc_response_to_ftc(stim_times_folder)
     session.save_pkl_file()
 

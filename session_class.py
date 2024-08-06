@@ -11,6 +11,7 @@ import scipy.stats as stats
 import pickle
 import os
 import matplotlib.pyplot as plt
+import connect_toolbox as ct
 
 
 class Session:
@@ -93,6 +94,7 @@ class Session:
         for unit in self.units:
             unit.calc_response_to_ftc(stim_times.stim_onset)
             
+            
     def plot_response_to_ftc(self, figfolder):
         fig = plt.figure(figsize=[30, 8])
         
@@ -129,8 +131,48 @@ class Session:
             unit.plot_response_to_ftc(axes, self.ftc_freqs)
             fig.savefig(os.path.join(figfolder, f'{self.exp}_uinit{unit.unit:03d}.jpg'), dpi=300)
             sc.remove()
+        plt.close()
             
+    
+    def get_connected_pairs(self, input_chs, target_chs, window_size=50, binsize=.5, thresh=.999):
+        # get input and target units
+        chs = []
+        for unit in self.units:
+            chs.append(unit.ch)
+        input_units = [self.units[i] for i, ch in enumerate(chs) if ch in input_chs]
+        target_units = [self.units[i] for i, ch in enumerate(chs) if ch in target_chs]
         
+        pairs = None
+        n_check = len(input_units) * len(target_units)
+        checked = 0
+        new_pair = {}
+        
+        for input_unit in input_units:
+            for target_unit in target_units:
+                checked += 1
+                new_pair.update({'input_unit': input_unit.unit, 'target_unit': target_unit.unit})
+                print(f'{checked}/{n_check}')
+                
+                input_spiketimes = input_unit.spiketimes['spon'] * 1e3 # spiketimes in ms
+                target_spiketimes = target_unit.spiketimes['spon'] * 1e3 # spiketimes in ms
+                        
+                ccg, edges, nspk = ct.get_ccg(input_spiketimes, target_spiketimes, 
+                                           window_size=window_size, binsize=binsize)
+                connect, ccg_dict = ct.check_connection(ccg, 'spon', alpha=thresh)
+                new_pair.update(ccg_dict)
+                new_pair.update({'nspk_spon': nspk})
+                
+                taxis = (edges[1:] + edges[:-1]) / 2
+                new_pair.update({'taxis': [taxis]})
+                    
+                if pairs is None:
+                    pairs = pd.DataFrame(new_pair)
+                else:
+                    pairs = pd.concat([pairs, pd.DataFrame(new_pair)], ignore_index=True)
+                         
+        return pairs
+    
+    
 class SingleUnit:
 
     def __init__(self, unit, spiketimes):

@@ -142,7 +142,10 @@ def get_ccg(spiketimes_input, spiketimes_target, window_size=50, binsize=.5, ss=
 
     """
     ccg = 0
-    edges = np.arange(-window_size, window_size+binsize, binsize)
+    if binsize == 2:
+        edges = np.arange(-window_size-1, window_size+binsize, binsize)
+    else:
+        edges = np.arange(-window_size, window_size+binsize, binsize)
     if ss: # only consider single spikes (spikes with ISI > 20ms)
         if not any(isi):
             isi = get_isi(spiketimes_input)
@@ -178,17 +181,16 @@ def get_isi(spiketimes:np.array):
     return np.array(isi)
 
 
-def get_causal_window_idx(ccg:np.array, binsize=.5, window=[1, 5]):
+def get_causal_window_idx(edges, ccg:np.array, window=[1, 5]):
     ccg = np.array(ccg)
-    idx_t0 = ccg.shape[0] // 2
-    idx_delay_window = np.arange(idx_t0 + window[0]/binsize, idx_t0 + window[1]/binsize).astype(int)
+    idx_delay_window = np.where((edges >= window[0]) & (edges <= window[1]))[0][:-1]
     return idx_delay_window
 
 
-def check_connection(ccg, stim, binsize=.5, alpha=.999):
+def check_connection(edges, ccg, stim, alpha=.999):
     
     # get 1-5ms delay window index
-    idx_delay_window = get_causal_window_idx(ccg, binsize=.5)
+    idx_delay_window = get_causal_window_idx(edges, ccg)
     peak_idx = np.argmax(ccg)
     
     # initialize return values
@@ -197,9 +199,9 @@ def check_connection(ccg, stim, binsize=.5, alpha=.999):
     thresh = []
     baseline=[]
     hw = None
-    
+    binsize = edges[1] - edges[0]
     if (peak_idx in idx_delay_window): # ccg peak with 1-5ms delay
-        baseline =  get_baseline(ccg)
+        baseline =  get_baseline(ccg, binsize)
         ccg_filtered = ccg - baseline
         peak_idx_filtered = np.argmax(ccg-baseline)
         if (peak_idx_filtered in idx_delay_window):
@@ -226,7 +228,10 @@ def check_consecutive_above_thresh(ccg, thresh, idx_delay_window, idx_peak, meth
     if method == 'peak':
         return (ccg[idx_peak - 1] > thresh[idx_peak - 1]) or (ccg[idx_peak + 1] > thresh[idx_peak + 1])
     sig = np.where(ccg[idx_delay_window] > thresh[idx_delay_window])[0]
-    return 1 in np.diff(sig)
+    if len(idx_delay_window) > 4:
+        return 1 in np.diff(sig)
+    else:
+        return len(sig) > 0
 
 
 def check_hw(ccg, binsize):
@@ -267,7 +272,7 @@ def get_connected_pairs(input_units, target_units, triggers, window_size=50, bin
                     
                 ccg, edges, nspk = get_ccg(input_spiketimes, target_spiketimes, 
                                            window_size=window_size, binsize=binsize)
-                connect, ccg_dict = check_connection(ccg, stim, alpha=thresh)
+                connect, ccg_dict = check_connection(edges, ccg, stim, alpha=thresh)
                 new_pair.update(ccg_dict)
                 new_pair.update({f'nspk_{stim}': nspk})
             
@@ -294,12 +299,13 @@ def refine_connected_pairs(datafolder=r'E:\Congcong\Documents\data\connection\da
         print(f'Processing {file}')
         pairs_old = pd.read_json(file)
         pairs = None
+        edges = np.array(pairs_old.iloc[0].edges)
         for i in pairs_old.index:
             new_pair = dict(pairs_old.iloc[i])
             new_pair['taxis'] = [new_pair['taxis']]
             for stim in ('spon', 'spon_ss', 'dmr', 'dmr_ss'):
                 ccg = np.array(eval(f'new_pair[\'ccg_{stim}\']'))
-                connect, ccg_dict = check_connection(ccg, stim)
+                connect, ccg_dict = check_connection(edges, ccg, stim)
                 new_pair.update(ccg_dict)
             if pairs is None:
                 pairs = pd.DataFrame(new_pair)
@@ -310,32 +316,37 @@ def refine_connected_pairs(datafolder=r'E:\Congcong\Documents\data\connection\da
   
 
 def batch_get_ne_pair_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
-                          savefolder=r'E:\Congcong\Documents\data\connection\data-pkl', stim='spon'):
+                          savefolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
+                          stim='spon', df=20, binsize=.5):
     files = glob.glob(datafolder + r'\*pairs.json', recursive=False)
     for idx, file in enumerate(files):
         print('{}/{} Processing {}'.format(idx+1, len(files), file))
-        nepairs = get_ne_pair_ccg(file, stim, datafolder=datafolder)
+        try:
+            nepairs = get_ne_pair_ccg(file, stim, datafolder=datafolder, df=df, binsize=binsize)
+        except IndexError:
+            continue
         if nepairs is None:
             continue
         filename = re.search('\d{6}_\d{6}.*', file).group(0)
-        filename = re.sub('pairs', f'pairs-ne-{stim}', filename)
+        filename = re.sub('pairs', f'pairs-ne-{df}-{stim}-{binsize}ms_bin', filename)
         nepairs.to_json(os.path.join(savefolder, filename))
         
         
-def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'):
+def get_ne_pair_ccg(pairfile, stim='spon', df = 20, binsize=.5,
+                    datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'):
     
     # load single units
     exp = re.search('\d{6}_\d{6}', pairfile).group(0)
     _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
     #load ne
     s = stim.split("_")[0]
-    nefile = glob.glob(os.path.join(datafolder, f'{exp}*-20dft-{s}.pkl'))[0]
+    nefile = glob.glob(os.path.join(datafolder, f'{exp}*-{df}dft-{s}.pkl'))[0]
     with open(nefile, 'rb') as f:
         ne = pickle.load(f)
     
     nepairs = None
     if 'ss' in stim:
-        pairs = pd.read_json(re.sub('pairs', f'pairs-ne-{s}', pairfile))
+        pairs = pd.read_json(re.sub('pairs', f'pairs-ne-{df}-{s}', pairfile))
         if len(pairs) < 1:
             return None
         for i in range(len(pairs)):
@@ -346,7 +357,7 @@ def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\da
             target_unit = target_units[target_idx]
             member_idx = np.where(ne.ne_members[cne] == input_idx)[0][0]
             ne_unit = ne.member_ne_spikes[cne][member_idx]
-            new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim)
+            new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim, binsize=binsize)
             new_pair.update({'target_unit': target_unit.unit, 'target_idx': target_idx, 
                              'input_unit':input_unit.unit, 'input_idx': input_idx,
                              'cne': cne})
@@ -373,7 +384,7 @@ def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\da
                     for member_idx, member in enumerate(members):
                         input_unit = input_units[member]
                         ne_unit = ne.member_ne_spikes[cne][member_idx]
-                        new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim)
+                        new_pair = get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim=stim, binsize=binsize)
                         new_pair.update({'target_unit': target_unit.unit, 'target_idx': target, 
                                          'input_unit':input_unit.unit, 'input_idx': member,
                                         'cne': cne})
@@ -384,7 +395,7 @@ def get_ne_pair_ccg(pairfile, stim='spon', datafolder=r'E:\Congcong\Documents\da
     return nepairs
     
 
-def get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim='spon'):
+def get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim='spon', binsize=.5):
     s = stim.split("_")[0]
 
     # get ccg between neurons
@@ -394,25 +405,26 @@ def get_ne_neuron_ccg(input_unit, ne_unit, target_unit, stim='spon'):
         input_spiketimes = input_spiketimes[isi > 20]
  
     target_spiketimes = eval(f'target_unit.spiketimes_{s}')
-    ccg_neuron, edges, nspk_neuron = get_ccg(input_spiketimes, target_spiketimes)
-    taxis = [(edges[:-1] + edges[1:]) / 2]
-    connect, pair = check_connection(ccg_neuron, f'neuron_{stim}')
+    ccg_neuron, edges, nspk_neuron = get_ccg(input_spiketimes, target_spiketimes, binsize=binsize)
+    connect, pair = check_connection(edges, ccg_neuron, f'neuron_{stim}')
     pair.update({f'nspk_neuron_{stim}': nspk_neuron})
-    pair.update({'taxis': taxis})
 
     # get ccg between ne and neuron
     input_spiketimes_ne = ne_unit.spiketimes
     input_spiketimes_ne = np.array(sorted(list(set(input_spiketimes_ne).intersection(set(input_spiketimes)))))
-    ccg_ne, edges, nspk_ne = get_ccg(input_spiketimes_ne, target_spiketimes)
-    connect, pair_tmp = check_connection(ccg_ne, f'ne_{stim}')
+    ccg_ne, edges, nspk_ne = get_ccg(input_spiketimes_ne, target_spiketimes, binsize=binsize)
+    connect, pair_tmp = check_connection(edges, ccg_ne, f'ne_{stim}')
     pair.update(pair_tmp)
     pair.update({f'nspk_ne_{stim}': nspk_ne})
     
     # ccg between nonne and neuron
     ccg_nonne = ccg_neuron - ccg_ne
-    connect, pair_tmp = check_connection(ccg_nonne, f'nonne_{stim}')
+    connect, pair_tmp = check_connection(edges, ccg_nonne, f'nonne_{stim}')
     pair.update(pair_tmp)
     pair.update({f'nspk_nonne_{stim}': nspk_neuron - nspk_ne})
+    
+    pair.update({'edges': [edges]})
+
     
     return pair
 
@@ -442,8 +454,10 @@ def update_baseline(pairs, field_id):
 
 
 def batch_get_efficacy_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
-                              stim='spon', subsample=False, ss=False):
-    files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
+                              stim='spon', subsample=False, df=20, binsize=.5):
+    files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{df}-{stim}-{binsize}ms_bin.json'))
+    if files is None:
+        files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{df}-{stim}.json'))
     for file in files:
         print(file)
         pairs = pd.read_json(file)
@@ -453,7 +467,7 @@ def batch_get_efficacy_ne_ccg(datafolder=r'E:\Congcong\Documents\data\connection
         else:
             exp = re.search('\d{6}_\d{6}', file).group(0)
             spkfiles, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
-            nefile = glob.glob(os.path.join(datafolder, f'{exp}*ne-20dft-spon.pkl'))[0]
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*ne-{df}dft-spon.pkl'))[0]
             with open(nefile, 'rb') as f:
                 nedata = pickle.load(f)
             if len(nedata.edges) == 2:
@@ -514,8 +528,7 @@ def get_efficacy_subsample(target_spiketimes, input1_spiketimes, input2_spiketim
     
     # get efficacy for input1:
     ccg, edges, _ = get_ccg(input1_spiketimes, target_spiketimes)
-    taxis = (edges[1:] + edges[:-1]) / 2
-    efficacy_input1 = get_efficacy(ccg, nspk, taxis)
+    efficacy_input1 = get_efficacy(edges, ccg, nspk)
     
     input2_spiketimes = list(input2_spiketimes)
     random.seed(0)
@@ -523,7 +536,7 @@ def get_efficacy_subsample(target_spiketimes, input1_spiketimes, input2_spiketim
         input2_spiketimes_tmp = random.sample(input2_spiketimes, nspk)
         
         ccg, edges, _ = get_ccg(input2_spiketimes_tmp, target_spiketimes)
-        efficacy_input2[i] = get_efficacy(ccg, nspk, taxis)
+        efficacy_input2[i] = get_efficacy(edges, ccg, nspk)
     
     if len(input1_spiketimes) > len(input2_spiketimes):
        return np.median(efficacy_input2), efficacy_input1
@@ -537,16 +550,15 @@ def update_efficacy(pairs, field_id):
     for i in range(len(pairs)):
         pair = pairs.loc[i]
         ccg = np.array(pair['ccg' + field_id])
-        ccg_filtered = np.array(pair['ccg_filtered' + field_id])
-        taxis = np.array(pair.taxis)
+        edges =  np.array(pair.edges)
         nspk = pair['nspk' + field_id]
-        efficacy.append(get_efficacy(ccg, nspk, taxis))
+        efficacy.append(get_efficacy(edges, ccg, nspk))
     pairs['efficacy' + field_id] = efficacy
     return pairs
 
 
-def get_efficacy(ccg, nspk, taxis, method='peak'):
-    causal_idx = get_causal_spike_idx(ccg, method)
+def get_efficacy(edges, ccg, nspk, method='peak'):
+    causal_idx = get_causal_spike_idx(edges, ccg, method)
     baseline = get_causal_spk_baseline(ccg, causal_idx)
     try:
         n_causal_spk = sum(ccg[causal_idx] - baseline)
@@ -555,45 +567,50 @@ def get_efficacy(ccg, nspk, taxis, method='peak'):
     return n_causal_spk / nspk * 100
 
 
-def get_causal_spike_idx(ccg, method='peak'):
+def get_causal_spike_idx(edges, ccg, method='peak'):
+    causal_window = get_causal_window_idx(edges, ccg)
+    nidx = len(causal_window)
     if method == 'peak':
-        idx_peak = np.argmax(ccg[100:110]) + 100
-        causal_idx = np.array(range(idx_peak - 3, idx_peak + 5))
+        idx_peak = np.argmax(ccg[causal_window]) + causal_window[0]
+        causal_idx = np.array(range(idx_peak - (nidx-1)//2, idx_peak + (nidx + 1)//2 + 1))
     elif method == 'window':
-        causal_idx = get_causal_window_idx(ccg)
+        causal_idx = causal_window
     return causal_idx
 
 
 def get_causal_spk_baseline(ccg, causal_spk_idx):
-    causal_baseline = list(range(causal_spk_idx[0]-4, causal_spk_idx[0])) \
-        + list(range(causal_spk_idx[-1]+1, causal_spk_idx[-1]+5))
+    nidx = len(causal_spk_idx)
+    causal_baseline = list(range(causal_spk_idx[0]-nidx//2, causal_spk_idx[0])) \
+        + list(range(causal_spk_idx[-1]+1, causal_spk_idx[-1] + 1 + nidx//2))
     try:
         return np.mean(ccg[causal_baseline])
     except IndexError:
         return None
 
 
-def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', stim='spon'):
-    files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{stim}.json'))
+def batch_inclusion(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
+                    stim='spon', df=20, binsize=None):
+    files = glob.glob(os.path.join(datafolder, f'*-pairs-ne-{df}-{stim}-{binsize}ms_bin.json'))
     for file in files:
         pairs = pd.read_json(file)
         include = []
-        idx = get_causal_window_idx(pairs.loc[0][f'ccg_neuron_{stim}'])
+        edges = np.array(pairs.loc[0].edges)
+        idx = get_causal_window_idx(edges, pairs.loc[0][f'ccg_neuron_{stim}'])
         for i in range(len(pairs)):
             pair = pairs.loc[i]
             include_tmp = True
-            # check if there are enough spikes in causal window for a good extimate of efficacy
+            # check if there are enough spikes in causal window for a good estimate of efficacy
             for unit_type in ('neuron', 'ne'):
-                ccg = np.array(pair[f'ccg_{unit_type}_{stim}'])
-                if sum(ccg[idx]) < 20:
-                    include_tmp = False
-                    include.append(include_tmp)
-                    break
+                 ccg = np.array(pair[f'ccg_{unit_type}_{stim}'])
+                 if sum(ccg[idx]) < 20:
+                     include_tmp = False
+                     include.append(include_tmp)
+                     break
              # check if any of the ccg indicate functional connection
             if include_tmp:
-                for unit_type in ('neuron', 'ne'):
+                for unit_type in ('nonne', 'ne'):
                     ccg = np.array(pair[f'ccg_{unit_type}_{stim}'])
-                    include_tmp, _ = check_connection(ccg, stim)
+                    include_tmp, _ = check_connection(edges, ccg, stim)
                     if include_tmp:
                         break
                 include.append(include_tmp)
@@ -615,7 +632,7 @@ def get_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\da
             su_file = os.path.join(datafolder, re.sub('-pairs.json', '.pkl', file))
             with open(su_file, 'rb') as f:
                 session = pickle.load(f)
-            spktrain, _ = session.downsample_spktrain(df=20, stim='spon')
+            spktrain, _ = session.downsample_spktrain(df=10, stim='spon')
             pairs_common_target = []
             target = []
             for target_idx in multi_input:
@@ -651,9 +668,10 @@ def get_corr_common_target(datafolder=r'E:\Congcong\Documents\data\connection\da
             
             
 def prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
-                      savefolder=r'E:\Congcong\Documents\data\connection\data-summary'):
+                      savefolder=r'E:\Congcong\Documents\data\connection\data-summary',
+                      df=20):
     
-    files = glob.glob(os.path.join(datafolder, '*pairs.json'))
+    files = glob.glob(os.path.join(r"E:\Congcong\Documents\data\connection\data-pkl\pairs\pairs_99", '*pairs.json'))
     pairs_all = None
     for file in files:
         # get pairs connected to A1
@@ -661,7 +679,7 @@ def prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pk
         input_idx = pairs.input_idx.unique()
         input_pairs = set(itertools.combinations(input_idx, 2)) # all pairs of input neurons
         # get pairs in cNEs
-        ne_file = re.sub('pairs.json', 'ne-20dft-spon.pkl', file)
+        ne_file = re.sub('pairs.json', f'ne-{df}dft-spon.pkl', file)
         with open(ne_file, 'rb') as f:
             ne = pickle.load(f)
         member_pairs = netools.get_member_pairs(ne) # all member pairs
@@ -692,7 +710,7 @@ def prob_share_target(datafolder=r'E:\Congcong\Documents\data\connection\data-pk
         else:
             pairs_all = pd.concat([pairs_all, pairs])
     pairs_all.reset_index(drop=True, inplace=True)
-    pairs_all.to_json(os.path.join(savefolder, 'pairs_common_target_ne.json'))       
+    pairs_all.to_json(os.path.join(savefolder, f'pairs_common_target_ne_{df}dft.json'))       
 
                 
 def batch_get_wavefrom_tpd(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'):
@@ -707,8 +725,13 @@ def batch_get_wavefrom_tpd(datafolder=r'E:\Congcong\Documents\data\connection\da
         
         session.save_pkl_file()
 
-def batch_label_target_cell_type(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', stim='spon'):
-    files = glob.glob(os.path.join(datafolder, f'*pairs-ne-{stim}.json'))
+def batch_label_target_cell_type(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl', 
+                                 stim='spon', df=20, binsize=None):
+
+    files = glob.glob(os.path.join(datafolder, f'*pairs-ne-{df}-{stim}-{binsize}ms_bin.json'))
+    if len(files) == 0:
+        files = glob.glob(os.path.join(datafolder, f'*pairs-ne-{df}-{stim}.json'))
+        
     for file in files:
         tpd_all = []
         pairs = pd.read_json(file)
@@ -951,9 +974,8 @@ def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon',
     for i in range(nreps):
         input_spiketimes_ne = random.sample(input_spiketimes, nspk_ne)
         ccg_ne, edges, _ = get_ccg(input_spiketimes_ne, target_spiketimes)
-        taxis = (edges[:-1] + edges[1:]) / 2
-        efficacy_perm['ne'][i] = get_efficacy(ccg_ne, nspk_ne, taxis)
-        efficacy_perm['nonne'][i] = get_efficacy(ccg - ccg_ne, nspk - nspk_ne, taxis)
+        efficacy_perm['ne'][i] = get_efficacy(edges, ccg_ne, nspk_ne)
+        efficacy_perm['nonne'][i] = get_efficacy(edges, ccg - ccg_ne, nspk - nspk_ne)
     efficacy_diff = efficacy_perm['ne'] - efficacy_perm['nonne']
     
     if hiact:
@@ -973,8 +995,9 @@ def get_efficacy_change_significance(pair, input_unit, target_unit, stim='spon',
 def batch_get_effiacay_coincident_spk(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
-        stim='spon', window=10, coincidence='act-level'):
-    pair_file = os.path.join(summary_folder, f'ne-pairs-{stim}.json')
+        stim='spon', df=10, coincidence='act-level'):
+    window = df / 2
+    pair_file = os.path.join(summary_folder, f'ne-pairs-{df}df-{stim}-0.5ms_bin.json')
 
     pairs = pd.read_json(pair_file)
     pairs = pairs[pairs[f'inclusion_{stim}'] 
@@ -992,7 +1015,7 @@ def batch_get_effiacay_coincident_spk(
         if exp != exp_loaded:
             _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
             exp_loaded = exp
-            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-{s}.pkl'))[0]
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-{df}dft-{s}.pkl'))[0]
             with open(nefile, 'rb') as f:
                 ne = pickle.load(f)
             
@@ -1068,13 +1091,13 @@ def get_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, ne
         print("get efficacy for combination {}/{}".format(i+1, len(hiact_spiketimes)))
         for j in range(nsubsample):
             spiketimes_tmp = random.sample(spiketimes, n_event)
-            ccg, edges, taxis = get_ccg(spiketimes_tmp, target_spiketimes)
-            efficacy_hiact[i, j] = get_efficacy(ccg, n_event, taxis)
+            ccg, edges, nspk_input = get_ccg(spiketimes_tmp, target_spiketimes)
+            efficacy_hiact[i, j] = get_efficacy(edges, ccg, n_event)
     efficacy_ne = np.zeros(nsubsample)
     for i in range(nsubsample):
         spiketimes_tmp = random.sample(ne_spiketimes, n_event)
-        ccg, edges, taxis = get_ccg(spiketimes_tmp, target_spiketimes)
-        efficacy_ne[i] = get_efficacy(ccg, n_event, taxis)
+        ccg, edges, nspk_input = get_ccg(spiketimes_tmp, target_spiketimes)
+        efficacy_ne[i] = get_efficacy(edges, ccg, n_event)
     
     pair['ccg_hiact_example'] = ccg
     pair['nspk_hiact'] = n_event
@@ -1133,7 +1156,7 @@ def get_hiact_spikes(input_unit, context_units, stim, window=10):
 def batch_test_effiacay_coincident_spk(
         datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
         summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
-        stim='spon', window=10, coincidence='act-level'):
+        stim='spon', window=10, coincidence='act-level', df=20):
     s = stim.split('_')[0]
     pair_file = os.path.join(summary_folder, f'ne-pairs-{coincidence}-{stim}-{window}ms.json')
     pairs = pd.read_json(pair_file)
@@ -1187,8 +1210,7 @@ def test_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, n
     for i in range(nreps):
         input_spiketimes_tmp = np.random.choice(input_spiketimes_hiact, n_events, replace=False)
         ccg, edges, _ = get_ccg(input_spiketimes_tmp, target_spiketimes)
-        taxis = (edges[:-1] + edges[1:]) / 2
-        efficacy_hiact_subsample[i] = get_efficacy(ccg, n_events, taxis)
+        efficacy_hiact_subsample[i] = get_efficacy(edges, ccg, n_events)
     pair['efficacy_hiact_subsample'] = efficacy_hiact_subsample
     
     # get efficacy of subsampled ne spikes
@@ -1197,7 +1219,7 @@ def test_effiacay_coincident_spk(pair, input_unit, target_unit, context_units, n
         input_spiketimes_tmp = np.random.choice(ne_spiketimes, n_events, replace=False)
         ccg, edges, _ = get_ccg(input_spiketimes_tmp, target_spiketimes)
         taxis = (edges[:-1] + edges[1:]) / 2
-        efficacy_ne_subsample[i] = get_efficacy(ccg, n_events, taxis)
+        efficacy_ne_subsample[i] = get_efficacy(edges, ccg, n_events)
     pair['efficacy_ne_subsample'] = efficacy_ne_subsample
     pair['efficacy_ne_hiact_z'] = (pair['efficacy_ne_subsample'].mean() -  pair['efficacy_hiact_subsample'].mean()) / \
                                     np.sqrt(pair['efficacy_ne_subsample'].std() ** 2 + pair['efficacy_hiact_subsample'].std() ** 2)
@@ -1320,8 +1342,8 @@ def get_target_nspk(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl'
         
         
 def batch_get_A1_nspk_after_MGB_spike(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
-       summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
-    pair_file = os.path.join(summary_folder, 'ne-pairs-spon-subsampled.json')
+       summary_folder=r'E:\Congcong\Documents\data\connection\data-summary', df=10, window=5):
+    pair_file = os.path.join(summary_folder, f'ne-pairs-{df}df-spon.json')
     pairs = pd.read_json(pair_file)
     pairs = pairs[pairs['inclusion_spon'] 
                   & (pairs['efficacy_ne_spon'] > 0) 
@@ -1338,7 +1360,7 @@ def batch_get_A1_nspk_after_MGB_spike(datafolder=r'E:\Congcong\Documents\data\co
         if exp != exp_loaded:
             _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
             exp_loaded = exp
-            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-{s}.pkl'))[0]
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-{df}dft-{s}.pkl'))[0]
             with open(nefile, 'rb') as f:
                 ne = pickle.load(f)
         
@@ -1349,15 +1371,15 @@ def batch_get_A1_nspk_after_MGB_spike(datafolder=r'E:\Congcong\Documents\data\co
         ne_spiketimes = ne.member_ne_spikes[cne][member_idx].spiketimes
         nonne_spiketimes = list(set(input_unit.spiketimes_spon).difference(set(ne_spiketimes)))
         assert(len(ne_spiketimes) + len(nonne_spiketimes) == len(input_unit.spiketimes_spon))
-        pair = get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_unit.spiketimes_spon)
+        pair = get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_unit.spiketimes_spon, window=window)
         if pair is not None:
             pairs_included.append(pair)
     pairs_included = pd.DataFrame(pairs_included)
     pairs_included.reset_index(inplace=True, drop=True)
-    pairs_included.to_json(os.path.join(summary_folder, 'ne-pairs-nspk_following_ne_nonne.json'))
+    pairs_included.to_json(os.path.join(summary_folder, f'ne-pairs-nspk_following_ne_nonne_{df}dft_{window}ms.json'))
 
 
-def get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_spiketimes):
+def get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_spiketimes, window=5):
     ne_spiketimes = np.array(ne_spiketimes)
     nonne_spiketimes = np.array(nonne_spiketimes)
     target_spiketimes = np.array(target_spiketimes)
@@ -1366,7 +1388,296 @@ def get_nspk_following_ne_nonne(pair, ne_spiketimes, nonne_spiketimes, target_sp
         nspk = np.zeros(input_spiketimes.size)
         for i, spk in enumerate(input_spiketimes):
             t_diff = target_spiketimes - spk
-            nspk[i] = sum((t_diff > 1) & (t_diff <=4))
+            nspk[i] = sum((t_diff > 0) & (t_diff <= window))
         nspk = nspk.astype(int)
         pair[f'{input_type}_nspk_following'] = collections.Counter(nspk)
     return pair
+
+def get_pairs_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                                          summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pairs = pd.read_json(os.path.join(summary_folder, 'pairs.json'))
+    exp_loaded = None
+    ccg_all = []
+    ccg_baseline = []
+    ccg_norm = []
+    for i in range(len(pairs)):
+        print(i)
+        pair = pairs.iloc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        ccg, edges, _ = get_ccg(input_unit.spiketimes_spon, target_unit.spiketimes_spon, window_size=500, binsize=10)
+        ccg_all.append(ccg)
+        ccg_baseline.append(np.mean([ccg[:20], ccg[-20:]]))
+        ccg_norm.append(ccg / ccg_baseline[-1])
+    pairs['ccg_10ms'] = ccg_all
+    pairs['ccg_10ms_baseline'] = ccg_baseline
+    pairs['ccg_10ms_norm'] = ccg_norm
+    pairs.to_json(os.path.join(summary_folder, 'pairs.json'))
+
+def get_ne_nonne_ccg(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                     summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+                     df=10):
+    pairs = pd.read_json(os.path.join(summary_folder, f'ne-pairs-{df}df-spon.json'))
+    pairs = pairs[pairs.inclusion_spon]
+    exp_loaded = None
+    ccg_ne_all = []
+    ccg_nonne_all = []
+    for i in range(len(pairs)):
+        print(i)
+        pair = pairs.iloc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            exp_loaded = exp
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:] 
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-{df}dft-spon.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+       
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        input_spiketimes = input_unit.spiketimes_spon
+        target_spiketimes = target_unit.spiketimes_spon
+        cne = pair.cne
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_unit = ne.member_ne_spikes[cne][member_idx]
+        ne_spiketimes = ne_unit.spiketimes
+        nonne_spiketimes = set(input_spiketimes).difference(set(ne_spiketimes))
+        assert(len(ne_spiketimes) + len(nonne_spiketimes) == len(input_spiketimes))
+        
+        ccg, edges, _ = get_ccg(ne_spiketimes, target_spiketimes, window_size=500, binsize=10)
+        ccg_baseline = np.mean([ccg[:20], ccg[-20:]])
+        ccg_norm = ccg / ccg_baseline
+        ccg_ne_all.append(ccg_norm)
+        
+        ccg, edges, _ = get_ccg(nonne_spiketimes, target_spiketimes, window_size=500, binsize=10)
+        ccg_baseline = np.mean([ccg[:20], ccg[-20:]])
+        ccg_norm = ccg / ccg_baseline
+        ccg_nonne_all.append(ccg_norm)
+       
+    pairs[f'ccg_{df//2}ms_ne'] = ccg_ne_all
+    pairs[f'ccg_{df//2}ms_nonne'] = ccg_nonne_all
+    pairs.to_json(os.path.join(summary_folder, f'ne-pairs-spon_ccg_{df//2}ms.json'))
+
+
+def get_ne_nonne_isi(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                     summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    pairs = pd.read_json(os.path.join(summary_folder, 'ne-pairs-spon.json'))
+    pairs = pairs[pairs.inclusion_spon]
+    exp_loaded = None
+    isi_ne_all = []
+    isi_nonne_all = []
+    for i in range(len(pairs)):
+        print(i)
+        pair = pairs.iloc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            exp_loaded = exp
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:] 
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-spon.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+       
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        input_spiketimes = input_unit.spiketimes_spon
+        input_spiketimes.sort()
+        target_spiketimes = target_unit.spiketimes_spon
+        target_spiketimes.sort()
+        cne = pair.cne
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_unit = ne.member_ne_spikes[cne][member_idx]
+        ne_spiketimes = ne_unit.spiketimes
+        isi_ne = []
+        isi_nonne = []
+        for j in range(len(input_spiketimes)):
+            spktime = input_spiketimes[j]
+            if j == 0:
+                isi = input_spiketimes[1] - spktime
+            elif j == len(input_spiketimes) - 1:
+                isi = spktime - input_spiketimes[j-1]
+            else:
+                isi = min(spktime - input_spiketimes[j-1], input_spiketimes[j+1] - spktime)
+            if isi < 0:
+                print('1')
+            if spktime in ne_spiketimes:
+                isi_ne.append(isi)
+            else:
+                isi_nonne.append(isi)
+        isi_ne_all.append(isi_ne)
+        isi_nonne_all.append(isi_nonne)
+        
+    pairs['isi_input_ne'] = isi_ne_all
+    pairs['isi_input_nonne'] = isi_nonne_all
+    pairs.to_json(os.path.join(summary_folder, 'ne-pairs-spon_ccg_10ms.json'))
+
+
+def get_ne_nonne_fr_before_mgb(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                     summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    window = [150, 50]
+    pairs = pd.read_json(os.path.join(summary_folder, 'ne-pairs-spon.json'))
+    pairs = pairs[pairs.inclusion_spon]
+    exp_loaded = None
+    fr_input_ne_all = []
+    fr_input_nonne_all = []
+    fr_input_ratio_all = []
+    fr_target_ne_all = []
+    fr_target_nonne_all = []
+    fr_target_ratio_all = []
+    for i in range(len(pairs)):
+        print(i)
+        pair = pairs.iloc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            exp_loaded = exp
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:] 
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-20dft-spon.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+       
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        input_spiketimes = input_unit.spiketimes_spon
+        input_spiketimes.sort()
+        target_spiketimes = target_unit.spiketimes_spon
+        target_spiketimes.sort()
+        cne = pair.cne
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_unit = ne.member_ne_spikes[cne][member_idx]
+        ne_spiketimes = ne_unit.spiketimes
+        nonne_spiketimes = np.array(list(set(input_spiketimes).difference(set(ne_spiketimes))))
+        nspk_input_ne = np.zeros(ne_spiketimes.shape)
+        nspk_input_nonne = np.zeros(nonne_spiketimes.shape)
+        nspk_target_ne = np.zeros(ne_spiketimes.shape)
+        nspk_target_nonne = np.zeros(nonne_spiketimes.shape)
+        for j, spktime in enumerate(ne_spiketimes):
+            nspk_target_ne[j] = sum((target_spiketimes < spktime - window[1]) & (target_spiketimes > spktime - window[0]))
+            nspk_input_ne[j] = sum((input_spiketimes < spktime - window[1]) & (input_spiketimes > spktime -  window[0]))
+        for j, spktime in enumerate(nonne_spiketimes):
+            nspk_target_nonne[j] = sum((target_spiketimes < spktime - window[1]) & (target_spiketimes > spktime -  window[0]))
+            nspk_input_nonne[j] = sum((input_spiketimes < spktime - window[1]) & (input_spiketimes > spktime -  window[0]))
+        
+        window_span = window[0]-window[1]
+        fr_input_ne, _ = np.histogram(nspk_input_ne /  window_span * 1000, range(0, 101, 10), density=True)
+        fr_input_nonne, _ = np.histogram(nspk_input_nonne /  window_span * 1000, range(0, 101, 10), density=True)
+        fr_target_ne, _ = np.histogram(nspk_target_ne /  window_span * 1000, range(0, 101, 10), density=True)
+        fr_target_nonne, _ = np.histogram(nspk_target_nonne /  window_span * 1000, range(0, 101, 10), density=True)
+        fr_input_ne *= 10 
+        fr_input_nonne *= 10 
+        fr_target_ne *= 10 
+        fr_target_nonne *= 10 
+        fr_input_ne_all.append(fr_input_ne)
+        fr_input_nonne_all.append(fr_input_nonne)
+        fr_target_ne_all.append(fr_target_ne)
+        fr_target_nonne_all.append(fr_target_nonne)
+        fr_input_ratio_all.append(fr_input_ne / fr_input_nonne)
+        fr_target_ratio_all.append(fr_target_ne / fr_target_nonne)
+        
+    pairs['fr_prior_input_ne'] =fr_input_ne_all
+    pairs['fr_prior_input_nonne'] = fr_input_nonne_all
+    pairs['fr_prior_target_ne'] =fr_target_ne_all
+    pairs['fr_prior_target_nonne'] = fr_target_nonne_all
+    pairs['fr_prior_input_ratio'] =fr_input_ratio_all
+    pairs['fr_prior_target_ratio'] =fr_target_ratio_all
+    pairs.to_json(os.path.join(summary_folder, f'ne-pairs-spon_fr_prior_{window_span}.json'))
+
+
+def get_ns_bs_fr_before_mgb(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                     summary_folder=r'E:\Congcong\Documents\data\connection\data-summary'):
+    window = [200, 0]
+    pairs = pd.read_json(os.path.join(summary_folder, 'pairs.json'))
+    exp_loaded = None
+    fr_prior_all = []
+    for i in range(len(pairs)):
+        print(i)
+        pair = pairs.iloc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        
+        input_spiketimes = input_unit.spiketimes_spon
+        input_spiketimes.sort()
+        target_spiketimes = target_unit.spiketimes_spon
+        target_spiketimes.sort()
+        
+        nspk = 0
+        for j, spktime in enumerate(input_spiketimes):
+            nspk += sum((target_spiketimes < spktime - window[1]) & (target_spiketimes > spktime - window[0]))
+       
+        window_span = window[0]-window[1]
+        fr = nspk / (window_span * len(input_spiketimes) / 1e3)
+        fr_prior_all.append(fr)
+        
+    pairs['fr_prior'] =fr_prior_all
+    pairs.to_json(os.path.join(summary_folder,'pairs.json'))
+
+
+def get_ne_nonne_fr_prior(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
+                     summary_folder=r'E:\Congcong\Documents\data\connection\data-summary',
+                     df=10):
+    window = [200, 0]
+    pairs = pd.read_json(os.path.join(summary_folder, 'ne-pairs-10df-spon.json'))
+    pairs = pairs[pairs.inclusion_spon]
+    exp_loaded = None
+    fr_prior_input_ne_all = []
+    fr_prior_input_nonne_all = []
+    fr_prior_target_ne_all = []
+    fr_prior_target_nonne_all = []
+    for i in range(len(pairs)):
+        print(i)
+        pair = pairs.iloc[i]
+        exp = pair.exp
+        if exp != exp_loaded:
+            exp_loaded = exp
+            _, input_units, target_units, trigger = load_input_target_files(datafolder, exp)
+            exp = str(exp)
+            exp = exp[:6] + '_' + exp[6:] 
+            nefile = glob.glob(os.path.join(datafolder, f'{exp}*-ne-{df}dft-spon.pkl'))[0]
+            with open(nefile, 'rb') as f:
+                ne = pickle.load(f)
+       
+        input_unit = input_units[pair.input_idx]
+        target_unit = target_units[pair.target_idx]
+        input_spiketimes = input_unit.spiketimes_spon
+        input_spiketimes.sort()
+        target_spiketimes = target_unit.spiketimes_spon
+        target_spiketimes.sort()
+        cne = pair.cne
+        member_idx = np.where(ne.ne_members[cne] == pair.input_idx)[0][0]
+        ne_unit = ne.member_ne_spikes[cne][member_idx]
+        ne_spiketimes = ne_unit.spiketimes
+        nonne_spiketimes = np.array(list(set(input_spiketimes).difference(set(ne_spiketimes))))
+        
+        nspk_input_ne = 0
+        nspk_input_nonne = 0
+        nspk_target_ne = 0
+        nspk_target_nonne = 0
+        for spktime in ne_spiketimes:
+            nspk_target_ne += sum((target_spiketimes < spktime - window[1]) & (target_spiketimes > spktime - window[0]))
+            nspk_input_ne += sum((input_spiketimes < spktime - window[1]) & (input_spiketimes > spktime -  window[0]))
+        for spktime in nonne_spiketimes:
+            nspk_target_nonne += sum((target_spiketimes < spktime - window[1]) & (target_spiketimes > spktime -  window[0]))
+            nspk_input_nonne += sum((input_spiketimes < spktime - window[1]) & (input_spiketimes > spktime -  window[0]))
+        
+        window_span = window[0] - window[1]
+        fr_prior_input_ne_all.append(nspk_input_ne / ( window_span * len(ne_spiketimes) / 1e3))
+        fr_prior_input_nonne_all.append(nspk_input_nonne / ( window_span * len(nonne_spiketimes) / 1e3))
+        fr_prior_target_ne_all.append(nspk_target_ne / ( window_span * len(ne_spiketimes) / 1e3))
+        fr_prior_target_nonne_all.append(nspk_target_nonne / ( window_span * len(nonne_spiketimes) / 1e3))
+        
+    pairs['fr_prior_input_ne'] =fr_prior_input_ne_all
+    pairs['fr_prior_input_nonne'] = fr_prior_input_nonne_all
+    pairs['fr_prior_target_ne'] =fr_prior_target_ne_all
+    pairs['fr_prior_target_nonne'] = fr_prior_target_nonne_all
+
+    pairs.to_json(os.path.join(summary_folder, 'ne-pairs-spon_fr_prior.json'))
