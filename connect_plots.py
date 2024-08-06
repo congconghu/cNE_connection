@@ -396,6 +396,26 @@ def plot_position_on_probe(ax, pairs, units, location='MGB'):
     return position_idx, position_order
 
 
+def get_position_on_probe(units):
+    """
+
+    Parameters
+    ----------
+    pairs : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    position_idx : index of ne members based on their positions along the probe
+    position_order : order of ne members if you want to retrieve then shallow to deep
+
+    """
+    position_idx = []
+    for unit in units:
+        position_idx.append(unit.position_idx)
+    position_order = np.argsort(position_idx)
+    return position_idx, position_order
+
 
 def plot_ne_neuron_pairs_connection_ccg(axes, ne_neuron_pairs, stim='spon', force_causal=False):
     n_pairs = len(ne_neuron_pairs)
@@ -899,7 +919,7 @@ def batch_plot_fr_pairs(ax, datafolder='E:\Congcong\Documents\data\connection\da
    
 
 
-def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
+def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper',
             datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             example_file1=r'200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000.pkl',
             example_idx1=[0, 15, 10],
@@ -910,11 +930,8 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
     # summary plots
     # plot corr of pairs of neurons sharing common target
     x_start = .75
-    y_start = .7
     x_fig = .23
     y_fig = .2
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
-    plot_corr_common_target(ax=ax)
     # plot cNE member corr
     y_start = .4
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
@@ -923,88 +940,36 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
     y_start = .1
     ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
     plot_prob_share_target(ax=ax, df=10)
-    fig.savefig(os.path.join(figfolder, 'fig2a.pdf'), dpi=300)
-
-
-    # PART1: correlation of MGB neuros sharing A1 targets
-    # example CCG MGB neuronal pairs
-    example_file = os.path.join(datafolder, example_file1)
-    example_idx = example_idx1
-    with open(example_file, 'rb') as f:
-        session = pickle.load(f)
-     # plot strfs
-    x_start = .08
-    y_start = [.9, .8, .7]
-    y_fig = .06
-    x_fig = .07
-    for i, unit_idx in enumerate(example_idx):
-        ax = fig.add_axes([x_start, y_start[i], x_fig, y_fig])
-        plot_strf(ax, session.units[unit_idx].strf, 
-                   taxis=session.units[unit_idx].strf_taxis,
-                   faxis=session.units[unit_idx].strf_faxis, tlim=[50, 0], flim=[8,32], 
-                   flabels_arr=np.array([8, 16, 32]))
-        if i < 2:
-             ax.set_xticklabels([])
-             ax.set_ylabel('')
-        ax.set_xlabel('')
-    # example1
-    input1 = session.spktrain_spon[0][example_idx[0]]
-    input1 = (input1 - input1.mean()) / input1.std()
-    input1 = input1[50:-50]
-    x_start = .25
-    y_start = .85
-    x_fig = .1
-    y_fig = .08
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
-    input2 = session.spktrain_spon[0][example_idx[1]]
-    input2 = (input2 - input2.mean()) / input2.std()
-    corr = np.correlate(input1, input2) / len(input2)
-    taxis = np.arange(-25, 25.1, .5)
-    ax.bar(taxis, corr, color='k')
-    ax.set_xlim([-25, 25])
-    ax.set_ylim([-.005, .04])
-    ax.set_yticks([0, .02, .04])
-    ax.set_xticklabels([])
-    #example2
-    y_start = .72
-    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])    
-    input2 = session.spktrain_spon[0][example_idx[2]]
-    input2 = (input2 - input2.mean()) / input2.std()
-    corr = np.correlate(input1, input2) / len(input2)
-    ax.bar(taxis, corr, color='k')
-    ax.set_xlim([-25, 25])
-    ax.set_ylim([-.005, .04])
-    ax.set_yticks([0, .02, .04])
-    ax.set_xlabel('Lag (ms)')
-    ax.set_ylabel('Correlation')
-   
     
     # PART2: correlation of cNE members and nonmembers
     example_file = os.path.join(datafolder, example_file2)
     example_idx = example_idx2
     with open(example_file, 'rb') as f:
         session = pickle.load(f)
-     # plot strfs
+    ne_file = re.sub("fs20000", "fs20000-ne-10dft-spon", example_file)
+    with open(ne_file, 'rb') as f:
+        ne = pickle.load(f)
+    cne = 3
+    patterns = ne.patterns
+    # plot ICweights
     x_start = .08
-    y_start = [.6, .5, .4]
-    y_fig = .06
-    x_fig = .07
-    for i, unit_idx in enumerate(example_idx):
-        ax = fig.add_axes([x_start, y_start[i], x_fig, y_fig])
-        plot_strf(ax, session.units[unit_idx].strf, 
-                   taxis=session.units[unit_idx].strf_taxis,
-                   faxis=session.units[unit_idx].strf_faxis, tlim=[50, 0], flim=[5,20], 
-                   flabels_arr=np.array([5, 10, 20]))
-        if i < 2:
-             ax.set_xticklabels([])
-             ax.set_ylabel('')
-        ax.set_xlabel('')
+    y_start = .4
+    y_fig = .2
+    x_fig = .1
+    ax = fig.add_axes([x_start, y_start, x_fig, y_fig])
+    position_idx, position_order = get_position_on_probe(session.units)
+    weights = patterns[cne]
+    weights = weights[position_order]
+    member_thresh = 1 / np.sqrt(patterns.shape[1])
+    plot_ICweight(ax, weights, member_thresh, direction='v', markersize=2)
+    ax.set_xlim([-.4, .8])
+    ax.set_xticks([0, .4, .8])
     # plot ccgs
     input1 = session.spktrain_spon[0][example_idx[0]]
     input1 = (input1 - input1.mean()) / input1.std()
     input1 = input1[50:-50]
     # example1
-    x_start = .25
+    x_start = .4
     y_start = .55
     x_fig = .1
     y_fig = .08
@@ -1014,9 +979,9 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
     corr = np.correlate(input1, input2) / len(input2)
     taxis = np.arange(-25, 25.1, .5)
     ax.bar(taxis, corr, color='k')
-    ax.set_xlim([-25, 25])
-    ax.set_ylim([-.0025, .02])
-    ax.set_yticks([0, .01, .02])
+    ax.set_xlim([-10, 10])
+    ax.set_ylim([-.0025, .03])
+    ax.set_yticks([0, .01, .02, .03])
     ax.set_xticklabels([])
     #example2
     y_start = .42
@@ -1025,9 +990,9 @@ def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper\figure_v2',
     input2 = (input2 - input2.mean()) / input2.std()
     corr = np.correlate(input1, input2) / len(input2)
     ax.bar(taxis, corr, color='k')
-    ax.set_xlim([-25, 25])
-    ax.set_ylim([-.0025, .02])
-    ax.set_yticks([0, .01, .02])
+    ax.set_xlim([-10, 10])
+    ax.set_ylim([-.0025, .03])
+    ax.set_yticks([0, .01, .02, .03])
     ax.set_xlabel('Lag (ms)')
     ax.set_ylabel('Correlation')
     
