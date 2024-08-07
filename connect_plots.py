@@ -25,9 +25,13 @@ from plot_box import (
     boxplot_scatter, 
     plot_significance_star, 
     set_violin_half,
+    plot_corrmat,
+    plot_ICweigh_imshow,
+    plot_eigen_values,
 )
 from connect_toolbox import load_input_target_files
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import ne_toolbox as netools
 import connect_toolbox as ct
 import pickle as pkl
 from sklearn.metrics import r2_score
@@ -915,10 +919,187 @@ def batch_plot_fr_pairs(ax, datafolder='E:\Congcong\Documents\data\connection\da
     ax.set_xlabel('Spon FR (Hz)')
     ax.set_ylabel('Stim FR (Hz)')
     ax.tick_params(axis="both", which="major", labelsize=6)
-       
-   
 
 
+def figure2a(datafolder: str = r'E:\Congcong\Documents\data\connection\data-pkl',
+            figfolder: str = r'E:\Congcong\Documents\data\connection\paper'):
+    """
+    Figure2: groups of neurons with coordinated activities exist in A1 and MGB
+    Plot construction procedures for cNEs and  correlated firing around cNE events
+    cNE members show significantly higher cross correlation
+
+    Input:
+        datafolder: path to *ne-20dft-dmr.pkl files
+        figfolder: path to save figure
+    Return:
+        None
+    """
+    mpl.rcParams['axes.labelpad'] = 1
+
+    # use example recording to plot construction procedure
+    nefile = os.path.join(datafolder, '200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000-ne-10dft-spon.pkl')
+    with open(nefile, 'rb') as f:
+        ne = pickle.load(f)
+    session_file = re.sub('-ne-10dft-spon', '', nefile)
+    with open(session_file, 'rb') as f:
+        session = pickle.load(f)
+
+    figsize = [figure_size[1][0], 13 * cm]
+    fig = plt.figure(figsize=figsize)
+
+    # binned spikes trains
+    xstart = 0.07
+    ystart = 0.76
+    figy = 0.16
+    figx = 0.22
+    window=20
+    n_neuron = len(session.units)
+    ax = fig.add_axes([xstart, ystart, figx, figy])
+    spktrain = ne.spktrain
+    nspk = spktrain.sum(axis=0)
+    nspk = nspk[:len(nspk) //window * window]
+    nspk = nspk.reshape([window, len(nspk)//window]).sum(axis=0)
+    idx = np.argmax(nspk)
+    spktrain = spktrain[:, idx*window:idx*window + window]
+    plt.imshow(spktrain, cmap="gray_r", aspect="auto")
+    ax.invert_yaxis()
+    ax.set_yticks([5, 10, 15])
+    ax.set_ylabel("Neuron #")
+    ax.spines[['top']].set_visible(True)
+    ax.spines[['right']].set_visible(True)
+    for i in range(window-1):
+        plt.plot([i+.5, i+.5], [0, n_neuron], 'k', linewidth=.4)
+    ax.set_xlim([-.5, window-.5])
+    ax.set_ylim([.5, n_neuron-.5])
+    ax.set_xticks([])
+    
+    figy = 0.2
+    xstart = 0.4
+    xspace = 0.15
+    figx = 0.22
+
+    # plot correlation matrix
+    ax = fig.add_axes([xstart, ystart, figx, figy])
+    corr_mat = np.corrcoef(ne.spktrain)
+    im = plot_corrmat(ax, corr_mat)
+    im.set_clim([-.12, .12])
+    axins = inset_axes(
+        ax,
+        width="10%",  # width: 5% of parent_bbox width
+        height="80%",  # height: 50%
+        loc="center left",
+        bbox_to_anchor=(1.05, 0., 1, 1),
+        bbox_transform=ax.transAxes,
+        borderpad=0,
+    )
+    cb = fig.colorbar(im, cax=axins)
+    cb.ax.tick_params(axis='y', direction='in')
+    axins.set_title(' corr.', fontsize=6, pad=5)
+    cb.ax.set_yticks([-0.12, -.06, 0, .06, 0.12,])
+    axins.tick_params(axis='both', which='major', labelsize=6)
+
+    # plot eigen values
+    ax = fig.add_axes([xstart + figx + xspace, ystart, figx, figy])
+    corr_mat = np.corrcoef(ne.spktrain)
+    thresh = netools.get_pc_thresh(ne.spktrain)
+    plot_eigen_values(ax, corr_mat, thresh)
+    ax.set_ylim([.8, 1.4])
+    ax.set_yticks([.8, 1, 1.2, 1.4])
+    
+    # plot ICweights - color coded
+    ystart = .48
+    xstart = .07
+    figx = .18
+    ax = fig.add_axes([xstart, ystart, figx, figy])
+    patterns = ne.patterns
+
+    patterns[0], patterns[1] = np.array(patterns[1]), np.array(patterns[0])
+
+    members = ne.ne_members
+    members[0], members[1] = members[1], members[0]
+    im = plot_ICweigh_imshow(ax, ne.patterns, ne.ne_members)
+    im.set_clim([-.8, .8])
+    axins = inset_axes(
+        ax,
+        width="10%",  # width: 5% of parent_bbox width
+        height="80%",  # height: 50%
+        loc="center left",
+        bbox_to_anchor=(1.05, 0., 1, 1),
+        bbox_transform=ax.transAxes,
+        borderpad=0,
+    )
+    cb = fig.colorbar(im, cax=axins)
+    cb.ax.tick_params(axis='y', direction='in')
+    axins.set_title('IC weight', fontsize=6, pad=5)
+    cb.ax.set_yticks(np.arange(-.8, .81, .4))
+    cb.ax.set_yticklabels([-.8, -.4, 0, .4, .8])
+    axins.tick_params(axis='both', which='major', labelsize=6)
+
+    # stem plots for ICweights
+    xstart = xstart + figx + xspace
+    xspace = 0.002
+    figx = 0.07
+    n_ne, n_neuron = ne.patterns.shape
+    thresh = 1 / np.sqrt(n_neuron)
+    c = 0
+    for i in range(4):
+        ax = fig.add_axes([xstart + i * figx + i * xspace, ystart, figx, figy])
+        plot_ICweight(ax, ne.patterns[i], thresh, direction='v', ylim=(-0.3, 0.8), markersize=2)
+        if i > 0:
+            ax.set_axis_off()
+
+    # second row: activities
+    xstart = .77
+    ystart = .6
+    figx = 0.22
+    figy = 0.03
+    
+    # reorder units
+    cne = 2
+    edges = ne.edges[0] / 1000
+    centers = (edges[:-1] + edges[1:]) / 2
+    activity_idx = 5  # 99.5% as threshold
+    activity = ne.ne_activity[cne]
+
+    t_start = 597.5
+    t_end = t_start + .8
+
+    # plot activity
+    ax = fig.add_axes([xstart, ystart, figx, figy])
+    activity_thresh = ne.activity_thresh[cne][activity_idx]
+    ylim = [-10, 200]
+    plot_activity(ax, centers, activity, activity_thresh, [t_start, t_end], ylim)
+    ax.set_ylabel('activity (a.u.)', fontsize=6)
+    ax.set_title('cNE #3', fontweight='bold')
+
+    # plot raster
+    ystart = 0.4
+    figy = 0.18
+    ax = fig.add_axes([xstart, ystart, figx, figy])
+    members = ne.ne_members[cne]
+    for member in members:
+        p = mpl.patches.Rectangle((t_start, member + 0.6),
+                                  t_end - t_start, 0.8, color='gainsboro')
+        ax.add_patch(p)
+        c += 1
+
+    plot_raster(ax, session.units, linewidth=.6)
+    ax.eventplot(ne.ne_units[cne].spiketimes/1000, lineoffsets=n_neuron + 1, linelengths=0.8, colors='r', linewidth=.6)
+    plot_raster(ax, ne.member_ne_spikes[cne], offset='unit', color='r', linewidth=.6)
+    ax.set_xlim([t_start, t_end])
+    ax.spines[['bottom', 'left']].set_visible(False)
+    ax.set_xticks([])
+
+    # scale bar
+    ax.plot([t_start, t_start + .2], [0.1, 0.1], color='k', linewidth=1)
+    ax.set_yticks([n_neuron + 1])
+    ax.tick_params(axis='y', length=0)
+    ax.set_yticklabels(['cNE'], fontsize=6, color='r')
+    ax.set_ylim([0, n_neuron + 1.5])
+
+    fig.savefig(os.path.join(figfolder, 'fig2a.pdf'), dpi=1000)
+    
+    
 def figure2(figfolder=r'E:\Congcong\Documents\data\connection\paper',
             datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
             example_file1=r'200820_230604-site4-5655um-25db-dmr-31min-H31x64-fs20000.pkl',
@@ -1811,7 +1992,7 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     
     # PART1: plot example cNE and A1 connectin
     # load nepiars
-    example_file = os.path.join(datafolder, '200821_015617-site6-5655um-25db-dmr-31min-H31x64-fs20000-pairs-ne-10-spon.json')
+    example_file = os.path.join(datafolder, '210401_175257-site2-4900um-20db-dmr-37min-H31x64-fs20000-pairs-ne-10-spon.json')
     nepairs = pd.read_json(example_file)
     # load ne info
     exp = re.search('\d{6}_\d{6}', example_file).group(0)
@@ -1820,7 +2001,7 @@ def figure3(datafolder=r'E:\Congcong\Documents\data\connection\data-pkl',
     with open(nefile, 'rb') as f:
         ne = pkl.load(f)
     patterns = ne.patterns
-    # plot example cen
+    # plot example cne
     cne = 0
     target_idx = 32
     ne_neuron_pairs = nepairs[(nepairs.cne == cne) & (nepairs.target_idx == target_idx)].copy()

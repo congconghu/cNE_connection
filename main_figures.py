@@ -11,9 +11,10 @@ import connect_plots as cplot
 
 #cplot.figure1(example='201005_213847-MGB_23-A1_402')
 
-cplot.figure2()
+#cplot.figure2a()
+#cplot.figure2()
 
-#cplot.figure3()
+cplot.figure3()
 
 #cplot.figure4()
 
