@@ -15,6 +15,7 @@ import connect_plots as cplot
 #cplot.figure2()
 
 cplot.figure3()
+#cplot.figure3b()
 
 #cplot.figure4()
 
